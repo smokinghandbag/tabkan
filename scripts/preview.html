@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>TabKan redesign preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" type="text/css" href="../styles.css">
+  <style> body { font-family: 'Geist', sans-serif; } </style>
+</head>
+<body class="fullpage-body">
+  <div class="main-container">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-branding">
+          <img src="../icons/icon128.png" class="sidebar-logo" alt="">
+          <h1>TabKan</h1>
+        </div>
+        <button class="action-button sidebar-collapse-btn"><i class="fas fa-chevron-left"></i></button>
+      </div>
+      <div class="sidebar-scroll-wrapper">
+        <div class="sidebar-content">
+          <div class="card">
+            <div class="card-header sidebar-card-header">
+              <i class="fas fa-chevron-down sidebar-card-toggle"></i>
+              <span>Unfiled Tabs</span>
+              <span class="card-stats">4</span>
+            </div>
+            <ul>
+              <li class="tab-item"><div class="link-content"><img class="favicon" src="https://www.google.com/s2/favicons?domain=github.com"><div class="link-details"><span class="title">GitHub – build software better</span></div></div><div class="link-actions"><button class="action-button open-tab"><i class="fas fa-external-link-alt"></i></button></div></li>
+              <li class="tab-item"><div class="link-content"><img class="favicon" src="https://www.google.com/s2/favicons?domain=figma.com"><div class="link-details"><span class="title">Figma – design preview</span></div></div><div class="link-actions"><button class="action-button open-tab"><i class="fas fa-external-link-alt"></i></button></div></li>
+            </ul>
+          </div>
+        </div>
+        <div class="sidebar-content">
+          <div class="task-rollup-card">
+            <div class="task-rollup-header">
+              <i class="fas fa-chevron-down task-rollup-toggle"></i>
+              <div class="task-rollup-title"><span>All Tasks</span></div>
+              <div class="task-rollup-stats">3/8</div>
+            </div>
+          </div>
+        </div>
+        <div class="sidebar-content">
+          <div class="bookmarks-sidebar-card">
+            <div class="bookmarks-card-header">
+              <i class="fas fa-chevron-down bookmarks-card-toggle"></i>
+              <span class="bookmarks-card-title">Bookmarks</span>
+              <span class="bookmarks-card-count">12</span>
+              <button class="bookmarks-manager-btn"><i class="fas fa-bookmark"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tab-bin"><i class="fas fa-trash-alt"></i><span>Drop to Close</span></div>
+    </div>
+
+    <div class="content-area">
+      <div class="filters-search-container">
+        <div class="top-filters">
+          <button class="settings-btn"><i class="fas fa-compress-alt"></i></button>
+          <button class="settings-btn"><i class="fas fa-tags"></i></button>
+          <button class="settings-btn"><i class="fas fa-save"></i></button>
+          <button class="settings-btn"><i class="fas fa-cog"></i></button>
+          <div class="search-wrapper"><input id="search-input" placeholder="Search tabs..."></div>
+        </div>
+        <div class="filter-container tag-filter-container">
+          <label class="filter-label">Tags:</label>
+          <div class="filter-buttons tag-filters" id="tag-filters">
+            <button class="filter-btn tag-filter active" data-tag="all">All</button>
+            <button class="filter-btn tag-filter" data-tag="work">work</button>
+            <button class="filter-btn tag-filter" data-tag="research">research</button>
+          </div>
+        </div>
+      </div>
+      <div id="cards-container" class="fullpage-cards-grid">
+        <div class="card" style="--group-color:#1A73E8;">
+          <div class="card-header"><span class="editable">Research</span><span class="card-stats card-count">2</span>
+            <div class="card-actions">
+              <button class="action-button toggle-collapse"><i class="fas fa-compress-arrows-alt"></i></button>
+              <button class="action-button move-left"><i class="fas fa-arrow-left"></i></button>
+              <button class="action-button move-right"><i class="fas fa-arrow-right"></i></button>
+              <button class="action-button delete-card"><i class="fas fa-trash"></i></button>
+            </div>
+          </div>
+          <ul>
+            <li class="tab-item"><div class="link-content"><img class="favicon" src="https://www.google.com/s2/favicons?domain=arxiv.org"><div class="link-details"><span class="title">Attention Is All You Need</span><div class="tags-container"><span class="tag">research</span></div></div></div><div class="link-actions"><button class="action-button open-tab"><i class="fas fa-external-link-alt"></i></button></div></li>
+            <li class="tab-item"><div class="link-content"><img class="favicon" src="https://www.google.com/s2/favicons?domain=wikipedia.org"><div class="link-details"><span class="title">Transformer (machine learning)</span></div></div><div class="link-actions"><button class="action-button open-tab"><i class="fas fa-external-link-alt"></i></button></div></li>
+          </ul>
+          <button class="open-tab-btn"><i class="fas fa-plus"></i> Open new tab</button>
+        </div>
+
+        <div class="card" style="--group-color:#1E8E3E;">
+          <div class="card-header"><span class="editable">Work</span><span class="card-stats card-count">3</span>
+            <div class="card-actions">
+              <button class="action-button toggle-collapse"><i class="fas fa-compress-arrows-alt"></i></button>
+              <button class="action-button move-left"><i class="fas fa-arrow-left"></i></button>
+              <button class="action-button move-right"><i class="fas fa-arrow-right"></i></button>
+              <button class="action-button delete-card"><i class="fas fa-trash"></i></button>
+            </div>
+          </div>
+          <ul>
+            <li class="tab-item"><div class="link-content"><img class="favicon" src="https://www.google.com/s2/favicons?domain=mail.google.com"><div class="link-details"><span class="title">Inbox (24) – Gmail</span><div class="notes-container"><p>Reply to the Q3 thread before EOD.</p></div></div></div><div class="link-actions"><span class="task-badge task-badge-incomplete"><i class="fas fa-tasks"></i> 2</span><button class="action-button open-tab"><i class="fas fa-external-link-alt"></i></button></div></li>
+            <li class="tab-item"><div class="link-content"><img class="favicon" src="https://www.google.com/s2/favicons?domain=notion.so"><div class="link-details"><span class="title">Roadmap – Notion</span><div class="tags-container"><span class="tag">work</span></div></div></div><div class="link-actions"><button class="action-button open-tab"><i class="fas fa-external-link-alt"></i></button></div></li>
+            <li class="tab-item"><div class="link-content"><img class="favicon" src="https://www.google.com/s2/favicons?domain=calendar.google.com"><div class="link-details"><span class="title">Calendar</span></div></div><div class="link-actions"><button class="action-button open-tab"><i class="fas fa-external-link-alt"></i></button></div></li>
+          </ul>
+          <button class="open-tab-btn"><i class="fas fa-plus"></i> Open new tab</button>
+        </div>
+
+        <div class="card" style="--group-color:#F9AB00;">
+          <div class="card-header"><span class="editable">Reading</span><span class="card-stats card-count">1</span>
+            <div class="card-actions">
+              <button class="action-button toggle-collapse"><i class="fas fa-compress-arrows-alt"></i></button>
+              <button class="action-button move-left"><i class="fas fa-arrow-left"></i></button>
+              <button class="action-button move-right"><i class="fas fa-arrow-right"></i></button>
+              <button class="action-button delete-card"><i class="fas fa-trash"></i></button>
+            </div>
+          </div>
+          <ul>
+            <li class="tab-item"><div class="link-content"><img class="favicon" src="https://www.google.com/s2/favicons?domain=stratechery.com"><div class="link-details"><span class="title">Stratechery – weekly article</span></div></div><div class="link-actions"><button class="action-button open-tab"><i class="fas fa-external-link-alt"></i></button></div></li>
+          </ul>
+          <button class="open-tab-btn"><i class="fas fa-plus"></i> Open new tab</button>
+        </div>
+        <div class="create-card-link">+ New Group</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

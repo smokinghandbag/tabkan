@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>TabKan side panel preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="../sidebar-styles.css">
+  <style> body { display:flex; justify-content:flex-start; } .tab-ban-sidebar { width:300px; border-right:1px solid #2a2e36; } html{background:#0e0f12;} </style>
+</head>
+<body>
+  <div class="tab-ban-sidebar">
+    <div class="sidebar-search">
+      <button class="dashboard-btn"><i class="fas fa-th-large"></i></button>
+      <button class="dashboard-btn"><i class="fas fa-compress-alt"></i></button>
+      <input id="sidebar-search-input" placeholder="Search tabs..." />
+    </div>
+    <div class="sidebar-content">
+      <div class="sidebar-group">
+        <div class="group-header" style="border-left-color:#1A73E8; background:linear-gradient(to right,#1A73E808,#1d2026 40%)">
+          <span class="group-toggle"></span><span class="group-title">Research</span><span class="group-count">3</span>
+        </div>
+        <div class="group-content">
+          <div class="sidebar-tab active"><img class="tab-favicon" src="https://www.google.com/s2/favicons?domain=arxiv.org"><span class="tab-title">Attention Is All You Need</span></div>
+          <div class="sidebar-tab"><img class="tab-favicon" src="https://www.google.com/s2/favicons?domain=wikipedia.org"><span class="tab-title">Transformer (machine learning)</span></div>
+          <div class="sidebar-tab sleeping"><img class="tab-favicon" src="https://www.google.com/s2/favicons?domain=openreview.net"><span class="tab-title">Scaling laws (sleeping)</span><span class="sleeping-icon">&#9790;</span></div>
+        </div>
+      </div>
+      <div class="sidebar-group">
+        <div class="group-header" style="border-left-color:#1E8E3E; background:linear-gradient(to right,#1E8E3E08,#1d2026 40%)">
+          <span class="group-toggle"></span><span class="group-title">Work</span><span class="group-count">3</span>
+        </div>
+        <div class="group-content">
+          <div class="sidebar-tab"><img class="tab-favicon" src="https://www.google.com/s2/favicons?domain=mail.google.com"><span class="tab-title">Inbox (24) – Gmail</span></div>
+          <div class="sidebar-tab"><img class="tab-favicon" src="https://www.google.com/s2/favicons?domain=notion.so"><span class="tab-title">Roadmap – Notion</span></div>
+          <div class="sidebar-tab"><img class="tab-favicon" src="https://www.google.com/s2/favicons?domain=calendar.google.com"><span class="tab-title">Calendar</span></div>
+        </div>
+      </div>
+      <div class="sidebar-group collapsed">
+        <div class="group-header" style="border-left-color:#F9AB00; background:linear-gradient(to right,#F9AB0008,#1d2026 40%)">
+          <span class="group-toggle"></span><span class="group-title">Reading</span><span class="group-count">1</span>
+        </div>
+        <div class="group-content"></div>
+      </div>
+      <div class="sidebar-group">
+        <div class="group-header" style="border-left-color:#5F6368; background:linear-gradient(to right,#5F636808,#1d2026 40%)">
+          <span class="group-toggle"></span><span class="group-title">Unfiled Tabs</span><span class="group-count">2</span>
+        </div>
+        <div class="group-content">
+          <div class="sidebar-tab"><img class="tab-favicon" src="https://www.google.com/s2/favicons?domain=github.com"><span class="tab-title">GitHub – build software better</span></div>
+          <div class="sidebar-tab"><img class="tab-favicon" src="https://www.google.com/s2/favicons?domain=figma.com"><span class="tab-title">Figma</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

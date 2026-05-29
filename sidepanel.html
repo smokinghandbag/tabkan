@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TabKan - Sidebar</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="sidebar-styles.css">
+</head>
+<body>
+  <div class="tab-ban-sidebar">
+    <div class="sidebar-search">
+      <button id="open-dashboard-btn" class="dashboard-btn" title="Open TabKan Dashboard" aria-label="Open dashboard">
+        <i class="fas fa-th-large"></i>
+      </button>
+      <button id="toggle-all-groups-btn" class="dashboard-btn" title="Collapse All Groups" aria-label="Toggle all groups">
+        <i class="fas fa-compress-alt"></i>
+      </button>
+      <input type="text" id="sidebar-search-input" placeholder="Search tabs..." />
+    </div>
+    <div class="sidebar-content" id="sidebar-content">
+      <!-- Tab groups and tabs will be rendered here -->
+    </div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

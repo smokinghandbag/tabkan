@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>TabKan</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" type="text/css" href="styles.css">
+</head>
+<body class="fullpage-body">
+  <div class="main-container">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-branding">
+          <img src="icons/icon128.png" alt="TabKan Logo" class="sidebar-logo">
+          <h1>TabKan</h1>
+        </div>
+        <button id="sidebar-collapse-btn" class="action-button sidebar-collapse-btn" aria-label="Collapse sidebar"><i class="fas fa-chevron-left"></i></button>
+      </div>
+      <div class="sidebar-scroll-wrapper">
+        <div id="centro-card-container" class="sidebar-content">
+          <!-- Unfiled tabs will be rendered here -->
+        </div>
+        <div id="task-rollup-container" class="sidebar-content">
+          <!-- Task Roll-Up will be rendered here -->
+        </div>
+        <div id="bookmarks-card-container" class="sidebar-content">
+          <!-- Sleeping (Bookmarks) will be rendered here -->
+        </div>
+      </div>
+      <div id="tab-bin" class="tab-bin">
+        <i class="fas fa-trash-alt"></i>
+        <span>Drop to Close</span>
+      </div>
+    </div>
+    <div class="sidebar-collapsed">
+      <button id="sidebar-toggle" class="action-button sidebar-expand-btn" aria-label="Expand sidebar"><i class="fas fa-chevron-right"></i></button>
+      <div id="collapsed-favicons" class="collapsed-favicons">
+        <!-- Favicons will be rendered here when collapsed -->
+      </div>
+      <div id="collapsed-task-rollup" class="collapsed-task-rollup">
+        <!-- Task summary will be rendered here when collapsed -->
+      </div>
+      <div id="tab-bin-collapsed" class="tab-bin-collapsed">
+        <i class="fas fa-trash-alt"></i>
+      </div>
+    </div>
+    <div class="content-area">
+      <div class="filters-search-container">
+        <div class="top-filters">
+          <button id="toggle-all-cards-btn" class="settings-btn" title="Collapse All Cards" aria-label="Collapse all cards">
+            <i class="fas fa-compress-alt"></i>
+          </button>
+          <button id="tag-manager-btn" class="settings-btn" title="Tag Manager" aria-label="Open tag manager">
+            <i class="fas fa-tags"></i>
+          </button>
+          <button id="sessions-btn" class="settings-btn" title="Sessions" aria-label="Open sessions">
+            <i class="fas fa-save"></i>
+          </button>
+          <button id="settings-btn" class="settings-btn" title="Settings" aria-label="Open settings">
+            <i class="fas fa-cog"></i>
+          </button>
+          <div class="search-wrapper">
+            <input type="text" id="search-input" placeholder="Search tabs...">
+          </div>
+        </div>
+  
+        <div class="filter-container tag-filter-container">
+          <label class="filter-label">Tags:</label>
+          <div class="filter-buttons tag-filters" id="tag-filters">
+            <button class="filter-btn tag-filter active" data-tag="all">All</button>
+          </div>
+        </div>
+      </div>
+      <div id="cards-container" class="fullpage-cards-grid"></div>
+    </div>
+  </div>
+
+  <!-- Dialogs -->
+  <div id="dialog-overlay" class="hidden"></div>
+
+  <div id="rename-dialog" class="dialog dialog-wide hidden">
+    <h3 class="dialog-title">Edit Tab</h3>
+    <div class="dialog-columns">
+      <div class="dialog-column">
+        <div class="dialog-field">
+          <label for="rename-input">Title</label>
+          <input type="text" id="rename-input" class="dialog-input">
+        </div>
+        <div class="dialog-field">
+          <label for="notes-input">Notes</label>
+          <textarea id="notes-input" class="dialog-input" placeholder="Add notes..."></textarea>
+        </div>
+      </div>
+      <div class="dialog-column">
+        <div class="dialog-field">
+          <label for="tags-input">Tags</label>
+          <div id="tag-chips-container"></div>
+          <input type="text" id="tags-input" class="dialog-input" placeholder="Add a tag and press Enter..." list="tag-suggestions">
+          <datalist id="tag-suggestions"></datalist>
+        </div>
+        <div class="dialog-field">
+          <label for="add-todo-input">To-Do List</label>
+          <div id="todo-list-container"></div>
+          <input type="text" id="add-todo-input" class="dialog-input" placeholder="Add a to-do and press Enter...">
+        </div>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button id="rename-confirm" class="btn btn-primary">Save</button>
+    </div>
+  </div>
+
+  <div id="delete-dialog" class="dialog hidden">
+    <h3 class="dialog-title">Are you sure?</h3>
+    <p class="dialog-description">This action cannot be undone.</p>
+    <div class="dialog-actions">
+      <button id="delete-cancel" class="btn btn-secondary">Cancel</button>
+      <button id="delete-confirm" class="btn btn-destructive">Delete</button>
+    </div>
+  </div>
+
+  <div id="warning-dialog" class="dialog hidden">
+    <h3 class="dialog-title">Cannot Sleep Tab</h3>
+    <p class="dialog-description">You need at least one active tab for a group to remain active. Please add another tab to this group before sleeping the last one, or move this tab to a different group.</p>
+    <div class="dialog-actions">
+      <button id="warning-ok" class="btn btn-primary">OK</button>
+    </div>
+  </div>
+
+  <div id="create-card-dialog" class="dialog hidden">
+    <h3 class="dialog-title">Create New Group</h3>
+    <p class="dialog-description">Enter a name for your new group.</p>
+    <label for="new-card-name">Group Name</label>
+    <input type="text" id="new-card-name" class="dialog-input" placeholder="Enter group name...">
+    <div class="dialog-actions">
+      <button id="create-card-confirm" class="btn btn-primary">Create</button>
+    </div>
+  </div>
+
+  <div id="edit-note-dialog" class="dialog hidden">
+    <h3 class="dialog-title">Edit Note</h3>
+    <p class="dialog-description">Update the content and tags for your note.</p>
+    <label for="note-content-input">Content</label>
+    <textarea id="note-content-input" class="dialog-input" placeholder="Enter your note..."></textarea>
+    <label for="note-tags-input">Tags</label>
+    <div id="note-tag-chips-container"></div>
+    <input type="text" id="note-tags-input" class="dialog-input" placeholder="Add a tag and press Enter..." list="note-tag-suggestions">
+    <datalist id="note-tag-suggestions"></datalist>
+    <div class="dialog-actions">
+      <button id="edit-note-cancel" class="btn btn-secondary">Cancel</button>
+      <button id="edit-note-confirm" class="btn btn-primary">Save</button>
+    </div>
+  </div>
+
+  <div id="task-warning-dialog" class="dialog hidden">
+    <h3 class="dialog-title"><i class="fas fa-exclamation-triangle"></i> Unfinished Tasks</h3>
+    <p class="dialog-description">This tab has incomplete tasks. What would you like to do?</p>
+    <div id="task-warning-list" class="task-warning-list">
+      <!-- Unfinished tasks will be listed here -->
+    </div>
+    <div class="dialog-actions">
+      <button id="task-warning-cancel" class="btn btn-secondary">Cancel</button>
+      <button id="task-warning-complete" class="btn btn-primary">Mark All Complete</button>
+      <button id="task-warning-close-anyway" class="btn btn-destructive">Close Anyway</button>
+    </div>
+  </div>
+
+  <div id="settings-dialog" class="dialog hidden">
+    <h3 class="dialog-title"><i class="fas fa-cog"></i> Settings</h3>
+    <div class="settings-section">
+      <div class="setting-item">
+        <div class="setting-info">
+          <label class="setting-label">Auto-collapse other groups</label>
+          <p class="setting-description">When you expand a tab group in the browser, automatically collapse all other groups to keep focus on one group at a time.</p>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="auto-collapse-groups">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <label class="setting-label">Persistent Sidebar</label>
+          <p class="setting-description">The persistent sidebar is available as a browser side panel. It persists across all tabs and provides better performance. <strong>To open:</strong> Right-click the TabKan extension icon in Chrome's toolbar and select "Open side panel", or click the button on the right.</p>
+        </div>
+        <button id="open-sidebar-btn" class="btn btn-primary">
+          <i class="fas fa-sidebar"></i> Open Sidebar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="sessions-dialog" class="dialog hidden sessions-dialog">
+    <h3 class="dialog-title"><i class="fas fa-save"></i> Sessions</h3>
+    <p class="dialog-description">Save and restore your complete workspace including all tab groups, tabs, notes, and tasks.</p>
+
+    <div class="session-dialog-buttons">
+      <button id="save-new-session-btn" class="btn btn-primary session-save-btn">
+        <i class="fas fa-plus"></i> Save Current Session
+      </button>
+      <button id="import-session-btn" class="btn btn-secondary session-import-btn">
+        <i class="fas fa-upload"></i> Import Session
+      </button>
+      <input type="file" id="import-session-file" accept=".json" style="display: none;">
+    </div>
+
+    <div id="sessions-list" class="sessions-list">
+      <!-- Sessions will be rendered here -->
+    </div>
+  </div>
+
+  <div id="save-session-dialog" class="dialog hidden">
+    <h3 class="dialog-title">Save Session</h3>
+    <p class="dialog-description">Give your session a name to save your current workspace.</p>
+    <label for="session-name-input">Session Name</label>
+    <input type="text" id="session-name-input" class="dialog-input" placeholder="e.g., Work Project, Research, Monday Setup">
+    <label for="session-description-input">Description (Optional)</label>
+    <textarea id="session-description-input" class="dialog-input" placeholder="Brief description of this session..."></textarea>
+    <div class="dialog-actions">
+      <button id="save-session-cancel" class="btn btn-secondary">Cancel</button>
+      <button id="save-session-confirm" class="btn btn-primary">Save</button>
+    </div>
+  </div>
+
+  <div id="load-session-dialog" class="dialog hidden">
+    <h3 class="dialog-title">Load Session</h3>
+    <p class="dialog-description warning-text"><i class="fas fa-exclamation-triangle"></i> This will close all current tabs and replace them with the saved session.</p>
+    <div class="session-load-options">
+      <label class="radio-option">
+        <input type="radio" name="load-mode" value="replace" checked>
+        <span>Replace current tabs</span>
+      </label>
+      <label class="radio-option">
+        <input type="radio" name="load-mode" value="new-window">
+        <span>Open in new window</span>
+      </label>
+    </div>
+    <div class="dialog-actions">
+      <button id="load-session-cancel" class="btn btn-secondary">Cancel</button>
+      <button id="load-session-confirm" class="btn btn-primary">Load Session</button>
+    </div>
+  </div>
+
+  <div id="tag-manager-dialog" class="dialog hidden">
+    <h3 class="dialog-title"><i class="fas fa-tags"></i> Tag Manager</h3>
+    <p class="dialog-description">Manage all tags used across your tabs and notes.</p>
+
+    <div class="tag-manager-add">
+      <input type="text" id="tag-manager-input" class="dialog-input" placeholder="Add a new tag and press Enter...">
+    </div>
+
+    <div id="tag-manager-list" class="tag-manager-list">
+      <!-- Tags will be rendered here -->
+    </div>
+  </div>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

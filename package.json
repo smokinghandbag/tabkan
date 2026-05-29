@@ -1,0 +1,23 @@
+{
+  "name": "tabkan",
+  "version": "4.4.0",
+  "private": true,
+  "description": "Turn Chrome's native tab groups into a visual Kanban board.",
+  "author": "Bjorn Byrne (https://www.bjornbyrne.com)",
+  "homepage": "https://github.com/smokinghandbag/tabkan",
+  "type": "module",
+  "scripts": {
+    "check": "for f in background.js sidepanel.js popup.js src/*.js scripts/smoke.mjs; do node --check \"$f\" || exit 1; done && node --input-type=commonjs -e \"JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest.json valid')\"",
+    "smoke": "node scripts/smoke.mjs .",
+    "test": "npm run check && npm run smoke",
+    "package": "bash scripts/package.sh"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.3"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/smokinghandbag/tabkan.git"
+  }
+}
