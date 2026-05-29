@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "TabKan",
   "version": "4.4",
-  "description": "A Chrome extension to organize your tabs and tab groups in a Kanban-style interface.",
+  "description": "Organize your Chrome tabs and tab groups as a visual Kanban board - with notes, tags, to-dos, saved sessions, and a side panel.",
   "permissions": [
     "tabs",
     "storage",
