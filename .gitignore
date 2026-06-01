@@ -7,3 +7,8 @@ dist/
 # Internal context + store-asset sources (kept on the Forgejo archive only)
 CLAUDE.md
 scripts/promo.html
+scripts/store/
+docs/CHROME_WEB_STORE.md
+
+# Local deploy secrets — never commit
+.env
