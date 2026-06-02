@@ -818,7 +818,7 @@ h1 {
   flex-direction: column;
   gap: 1rem;
   padding: 0;
-  margin-left: 1rem;
+  margin-left: 0;
   background-color: var(--background);
 }
 
