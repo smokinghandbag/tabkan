@@ -1,8 +1,8 @@
 @font-face {
-  font-family: "Phosphor";
+  font-family: "Phosphor-Bold";
   src:
-    url("./Phosphor.woff2") format("woff2"),
-    url("./Phosphor.woff") format("woff");
+    url("./Phosphor-Bold.woff2") format("woff2"),
+    url("./Phosphor-Bold.woff") format("woff");
   font-weight: normal;
   font-style: normal;
   font-display: block;
@@ -10,7 +10,7 @@
 
 .ph {
   /* use !important to prevent issues with browser extensions that change fonts */
-  font-family: "Phosphor" !important;
+  font-family: "Phosphor-Bold" !important;
   speak: never;
   font-style: normal;
   font-weight: normal;

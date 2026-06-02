@@ -1,3 +1,7 @@
+/* Phosphor icons render at the bold weight (vendored); nudge size up slightly
+   so they read clearly at small toolbar/tile sizes. */
+.ph { font-size: 1.08em; }
+
 :root {
   --background: hsl(222 16% 9%);          /* deep blue-charcoal page bg */
   --sidebar-background: hsl(222 15% 11%); /* sidebar / column surface */
