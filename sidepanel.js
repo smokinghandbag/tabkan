@@ -92,13 +92,13 @@
       if (allGroupsCollapsed) {
         // Expand all
         groups.forEach(group => group.classList.remove('collapsed'));
-        icon.className = 'fas fa-compress-alt';
+        icon.className = 'ph ph-arrows-in-line-horizontal';
         toggleAllGroupsBtn.title = 'Collapse All Groups';
         allGroupsCollapsed = false;
       } else {
         // Collapse all
         groups.forEach(group => group.classList.add('collapsed'));
-        icon.className = 'fas fa-expand-alt';
+        icon.className = 'ph ph-arrows-out-line-horizontal';
         toggleAllGroupsBtn.title = 'Expand All Groups';
         allGroupsCollapsed = true;
       }

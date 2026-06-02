@@ -7,7 +7,7 @@ import {
   EXTENSION_CHECK_GRACE_PERIOD_MS, EXTENSION_CHECK_RETRY_COUNT,
   SCROLL_ANIMATION_SPEED, EDGE_SCROLL_ZONE_PX,
   FOLDER_INDENT_REM, BOOKMARK_INDENT_REM, FOLDER_HEADER_BASE_REM, DRAG_HANDLE_OFFSET_PX,
-  CHROME_GROUP_COLORS,
+  CHROME_GROUP_COLORS, movedLikeDrag,
 } from './utils.js';
 import { state, ui } from './state.js';
 import {
@@ -37,6 +37,10 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
 
   let isRendering = false; // Rendering lock
   let isDragging = false; // Track drag operations
+  // Pointer-down origin, used to tell a real click from the end of a drag.
+  // A tile click handler consults wasDragGesture() before acting.
+  let pointerDownPt = null;
+  let lastGestureWasDrag = false;
   let renderTimeout = null; // Debounce timer for render
   let pendingRender = false; // Flag for queued render
   let editDialogAbortController = null; // AbortController for edit dialog cleanup
@@ -76,7 +80,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     // Populate task list
     taskWarningDialog.list.innerHTML = `
       <ul>
-        ${unfinishedTasks.map(task => `<li><i class="fas fa-circle"></i><span>${escapeHtml(task.text)}</span></li>`).join('')}
+        ${unfinishedTasks.map(task => `<li><i class="ph ph-circle"></i><span>${escapeHtml(task.text)}</span></li>`).join('')}
       </ul>
     `;
 
@@ -127,9 +131,9 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     // Update toggle button icon
     const toggleIcon = sidebarToggle.querySelector("i");
     if (state.sidebarCollapsed) {
-      toggleIcon.className = "fas fa-chevron-right";
+      toggleIcon.className = "ph ph-caret-right";
     } else {
-      toggleIcon.className = "fas fa-chevron-left";
+      toggleIcon.className = "ph ph-caret-left";
     }
 
     saveData(false); // Don't re-render, just save the state
@@ -161,6 +165,23 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
       // Render will be triggered by background script
     }
   });
+
+  // --- drag-vs-click gesture tracking ------------------------------------
+  // Tiles are draggable, so a click that follows a small drag must NOT trigger
+  // the tile's primary action. We record the pointer-down point and, on the
+  // following click, flag whether it moved far enough to count as a drag.
+  // Handlers call wasDragGesture() to bail out when true.
+  document.addEventListener('pointerdown', (e) => {
+    pointerDownPt = { x: e.clientX, y: e.clientY };
+    lastGestureWasDrag = false;
+  }, true);
+  document.addEventListener('pointerup', (e) => {
+    if (pointerDownPt) {
+      lastGestureWasDrag = movedLikeDrag(pointerDownPt.x, pointerDownPt.y, e.clientX, e.clientY);
+    }
+  }, true);
+  // True if the gesture that produced the current click was actually a drag.
+  const wasDragGesture = () => lastGestureWasDrag || isDragging;
 
   chrome.runtime.onMessage.addListener((request) => {
     if (request.action === "render") {
@@ -783,14 +804,14 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     const incompleteTasks = todos.filter(t => !t.completed).length;
     const allTasksComplete = todos.length > 0 && incompleteTasks === 0;
     const taskBadgeClass = allTasksComplete ? 'task-badge-complete' : (incompleteTasks > 0 ? 'task-badge-incomplete' : '');
-    const taskBadgeHTML = todos.length > 0 ? `<span class="task-badge ${taskBadgeClass}" title="${incompleteTasks} incomplete task${incompleteTasks !== 1 ? 's' : ''}"><i class="fas fa-tasks"></i> ${incompleteTasks}</span>` : '';
+    const taskBadgeHTML = todos.length > 0 ? `<span class="task-badge ${taskBadgeClass}" title="${incompleteTasks} incomplete task${incompleteTasks !== 1 ? 's' : ''}"><i class="ph ph-list-checks"></i> ${incompleteTasks}</span>` : '';
 
-    const linkActions = `<div class="link-actions">${taskBadgeHTML}<button class="action-button open-tab" title="Open Tab"><i class="fas fa-external-link-alt"></i></button></div>`;
+    const linkActions = `<div class="link-actions">${taskBadgeHTML}<button class="action-button open-tab" title="Open Tab"><i class="ph ph-arrow-square-out"></i></button></div>`;
     const tagsHTML = tags.length > 0 ? `<div class="tags-container">${tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</div>` : '';
     const notesHTML = notes ? `<div class="notes-container"><p>${escapeHtml(notes)}</p></div>` : '';
     const todosSummaryHTML = todos.length > 0 ? `
       <div class="todos-summary">
-        <i class="fas fa-check-square"></i>
+        <i class="ph ph-check-square"></i>
         <span>${todos.filter(t => t.completed).length}/${todos.length}</span>
       </div>
     ` : '';
@@ -863,6 +884,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     });
 
     listItem.querySelector(".title").addEventListener("click", () => {
+      if (wasDragGesture()) return; // ignore the click that ends a drag
       openEditDialog(tab, (newTitle, newTags, newNotes, newTodos) => {
         state.tabMetadata[tab.url] = { title: newTitle, tags: newTags, notes: newNotes, todos: newTodos };
         saveData();
@@ -870,6 +892,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     });
 
     listItem.querySelector(".open-tab").addEventListener("click", async () => {
+      if (wasDragGesture()) return; // ignore the click that ends a drag
       await chrome.tabs.update(tab.id, { active: true });
       await chrome.windows.update(tab.windowId, { focused: true });
     });
@@ -884,11 +907,11 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     return `
       <div class="card-actions">
         <button class="action-button toggle-collapse" title="${isCollapsed ? 'Expand' : 'Collapse'}" data-group-id="${groupId}">
-          <i class="fas fa-${isCollapsed ? 'expand-arrows-alt' : 'compress-arrows-alt'}"></i>
+          <i class="ph ph-${isCollapsed ? 'arrows-out-line-horizontal' : 'arrows-in-line-horizontal'}"></i>
         </button>
-        <button class="action-button move-left" title="Move Left"><i class="fas fa-arrow-left"></i></button>
-        <button class="action-button move-right" title="Move Right"><i class="fas fa-arrow-right"></i></button>
-        <button class="action-button delete-card" title="Delete Group"><i class="fas fa-trash"></i></button>
+        <button class="action-button move-left" title="Move Left"><i class="ph ph-arrow-left"></i></button>
+        <button class="action-button move-right" title="Move Right"><i class="ph ph-arrow-right"></i></button>
+        <button class="action-button delete-card" title="Delete Group"><i class="ph ph-trash"></i></button>
       </div>
     `;
   };
@@ -915,7 +938,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
       cardElement.className = `card ${isSidebarCardCollapsed ? 'collapsed' : ''}`;
       cardElement.innerHTML = `
         <div class="card-header sidebar-card-header" data-sidebar-card-id="${group.id}">
-          <i class="fas fa-chevron-${isSidebarCardCollapsed ? 'right' : 'down'} sidebar-card-toggle"></i>
+          <i class="ph ph-caret-${isSidebarCardCollapsed ? 'right' : 'down'} sidebar-card-toggle"></i>
           <span data-card-id="${group.id}">${escapeHtml(group.title)}</span>
           <span class="card-stats">${totalItems}</span>
         </div>
@@ -948,7 +971,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     if (!isSidebar) {
       const openTabButton = document.createElement("button");
       openTabButton.className = "open-tab-btn";
-      openTabButton.innerHTML = '<i class="fas fa-plus"></i> Open new tab';
+      openTabButton.innerHTML = '<i class="ph ph-plus"></i> Open new tab';
       openTabButton.dataset.groupId = group.id;
       cardElement.appendChild(openTabButton);
     }
@@ -1259,7 +1282,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
           }
 
           // Update the icon
-          toggleCollapseBtn.innerHTML = isCurrentlyCollapsed ? '<i class="fas fa-compress-alt"></i>' : '<i class="fas fa-expand-alt"></i>';
+          toggleCollapseBtn.innerHTML = isCurrentlyCollapsed ? '<i class="ph ph-arrows-in-line-horizontal"></i>' : '<i class="ph ph-arrows-out-line-horizontal"></i>';
           toggleCollapseBtn.title = isCurrentlyCollapsed ? 'Collapse' : 'Expand';
 
           // Update the badge
@@ -1302,11 +1325,11 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
           if (isCollapsed) {
             cardElement.classList.remove('collapsed');
             delete state.collapsedCards[`sidebar-${cardId}`];
-            sidebarToggle.className = 'fas fa-chevron-down sidebar-card-toggle';
+            sidebarToggle.className = 'ph ph-caret-down sidebar-card-toggle';
           } else {
             cardElement.classList.add('collapsed');
             state.collapsedCards[`sidebar-${cardId}`] = true;
-            sidebarToggle.className = 'fas fa-chevron-right sidebar-card-toggle';
+            sidebarToggle.className = 'ph ph-caret-right sidebar-card-toggle';
           }
 
           saveData(false);
@@ -1429,7 +1452,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
               // Update the toggle button icon for this card
               const toggleBtn = card.querySelector('.toggle-collapse');
               if (toggleBtn) {
-                toggleBtn.innerHTML = '<i class="fas fa-compress-alt"></i>';
+                toggleBtn.innerHTML = '<i class="ph ph-arrows-in-line-horizontal"></i>';
                 toggleBtn.title = 'Collapse';
               }
 
@@ -1445,7 +1468,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
 
       allCardsCollapsed = false;
       toggleAllCardsBtn.title = "Collapse All Cards";
-      toggleAllCardsBtn.querySelector("i").className = "fas fa-compress-alt";
+      toggleAllCardsBtn.querySelector("i").className = "ph ph-arrows-in-line-horizontal";
     } else {
       // Collapse all cards
       allGroups.forEach(group => {
@@ -1463,7 +1486,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
               // Update the toggle button icon for this card
               const toggleBtn = card.querySelector('.toggle-collapse');
               if (toggleBtn) {
-                toggleBtn.innerHTML = '<i class="fas fa-expand-alt"></i>';
+                toggleBtn.innerHTML = '<i class="ph ph-arrows-out-line-horizontal"></i>';
                 toggleBtn.title = 'Expand';
               }
 
@@ -1487,7 +1510,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
 
       allCardsCollapsed = true;
       toggleAllCardsBtn.title = "Expand All Cards";
-      toggleAllCardsBtn.querySelector("i").className = "fas fa-expand-alt";
+      toggleAllCardsBtn.querySelector("i").className = "ph ph-arrows-out-line-horizontal";
     }
 
     // Save to storage without re-rendering
@@ -1501,7 +1524,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     if (allTags.length === 0) {
       tagManagerDialog.list.innerHTML = `
         <div class="empty-tag-manager">
-          <i class="fas fa-tags"></i>
+          <i class="ph ph-tag"></i>
           <p>No tags yet</p>
           <p style="font-size: 0.875rem;">Tags will appear here when you add them to tabs or notes.</p>
         </div>
@@ -1535,7 +1558,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
         </div>
         <div class="tag-manager-item-actions">
           <button class="action-button delete-tag-btn" title="Delete Tag">
-            <i class="fas fa-trash-alt"></i>
+            <i class="ph ph-trash"></i>
           </button>
         </div>
       </div>
@@ -1920,7 +1943,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
       sidebar.classList.add("collapsed");
       // Set initial icon state
       const toggleIcon = sidebarToggle.querySelector("i");
-      toggleIcon.className = "fas fa-chevron-right";
+      toggleIcon.className = "ph ph-caret-right";
     }
 
     collectTags();

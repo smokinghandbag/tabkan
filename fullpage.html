@@ -5,7 +5,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="vendor/phosphor/phosphor.css">
   <link rel="stylesheet" type="text/css" href="styles.css">
 </head>
 <body class="fullpage-body">
@@ -16,7 +16,7 @@
           <img src="icons/icon128.png" alt="TabKan Logo" class="sidebar-logo">
           <h1>TabKan</h1>
         </div>
-        <button id="sidebar-collapse-btn" class="action-button sidebar-collapse-btn" aria-label="Collapse sidebar"><i class="fas fa-chevron-left"></i></button>
+        <button id="sidebar-collapse-btn" class="action-button sidebar-collapse-btn" aria-label="Collapse sidebar"><i class="ph ph-caret-left"></i></button>
       </div>
       <div class="sidebar-scroll-wrapper">
         <div id="centro-card-container" class="sidebar-content">
@@ -30,12 +30,12 @@
         </div>
       </div>
       <div id="tab-bin" class="tab-bin">
-        <i class="fas fa-trash-alt"></i>
+        <i class="ph ph-trash"></i>
         <span>Drop to Close</span>
       </div>
     </div>
     <div class="sidebar-collapsed">
-      <button id="sidebar-toggle" class="action-button sidebar-expand-btn" aria-label="Expand sidebar"><i class="fas fa-chevron-right"></i></button>
+      <button id="sidebar-toggle" class="action-button sidebar-expand-btn" aria-label="Expand sidebar"><i class="ph ph-caret-right"></i></button>
       <div id="collapsed-favicons" class="collapsed-favicons">
         <!-- Favicons will be rendered here when collapsed -->
       </div>
@@ -43,23 +43,23 @@
         <!-- Task summary will be rendered here when collapsed -->
       </div>
       <div id="tab-bin-collapsed" class="tab-bin-collapsed">
-        <i class="fas fa-trash-alt"></i>
+        <i class="ph ph-trash"></i>
       </div>
     </div>
     <div class="content-area">
       <div class="filters-search-container">
         <div class="top-filters">
           <button id="toggle-all-cards-btn" class="settings-btn" title="Collapse All Cards" aria-label="Collapse all cards">
-            <i class="fas fa-compress-alt"></i>
+            <i class="ph ph-arrows-in-line-horizontal"></i>
           </button>
           <button id="tag-manager-btn" class="settings-btn" title="Tag Manager" aria-label="Open tag manager">
-            <i class="fas fa-tags"></i>
+            <i class="ph ph-tag"></i>
           </button>
           <button id="sessions-btn" class="settings-btn" title="Sessions" aria-label="Open sessions">
-            <i class="fas fa-save"></i>
+            <i class="ph ph-floppy-disk"></i>
           </button>
           <button id="settings-btn" class="settings-btn" title="Settings" aria-label="Open settings">
-            <i class="fas fa-cog"></i>
+            <i class="ph ph-gear"></i>
           </button>
           <div class="search-wrapper">
             <input type="text" id="search-input" placeholder="Search tabs...">
@@ -155,7 +155,7 @@
   </div>
 
   <div id="task-warning-dialog" class="dialog hidden">
-    <h3 class="dialog-title"><i class="fas fa-exclamation-triangle"></i> Unfinished Tasks</h3>
+    <h3 class="dialog-title"><i class="ph ph-warning"></i> Unfinished Tasks</h3>
     <p class="dialog-description">This tab has incomplete tasks. What would you like to do?</p>
     <div id="task-warning-list" class="task-warning-list">
       <!-- Unfinished tasks will be listed here -->
@@ -168,7 +168,7 @@
   </div>
 
   <div id="settings-dialog" class="dialog hidden">
-    <h3 class="dialog-title"><i class="fas fa-cog"></i> Settings</h3>
+    <h3 class="dialog-title"><i class="ph ph-gear"></i> Settings</h3>
     <div class="settings-section">
       <div class="setting-item">
         <div class="setting-info">
@@ -186,22 +186,22 @@
           <p class="setting-description">The persistent sidebar is available as a browser side panel. It persists across all tabs and provides better performance. <strong>To open:</strong> Right-click the TabKan extension icon in Chrome's toolbar and select "Open side panel", or click the button on the right.</p>
         </div>
         <button id="open-sidebar-btn" class="btn btn-primary">
-          <i class="fas fa-sidebar"></i> Open Sidebar
+          <i class="ph ph-sidebar-simple"></i> Open Sidebar
         </button>
       </div>
     </div>
   </div>
 
   <div id="sessions-dialog" class="dialog hidden sessions-dialog">
-    <h3 class="dialog-title"><i class="fas fa-save"></i> Sessions</h3>
+    <h3 class="dialog-title"><i class="ph ph-floppy-disk"></i> Sessions</h3>
     <p class="dialog-description">Save and restore your complete workspace including all tab groups, tabs, notes, and tasks.</p>
 
     <div class="session-dialog-buttons">
       <button id="save-new-session-btn" class="btn btn-primary session-save-btn">
-        <i class="fas fa-plus"></i> Save Current Session
+        <i class="ph ph-plus"></i> Save Current Session
       </button>
       <button id="import-session-btn" class="btn btn-secondary session-import-btn">
-        <i class="fas fa-upload"></i> Import Session
+        <i class="ph ph-upload-simple"></i> Import Session
       </button>
       <input type="file" id="import-session-file" accept=".json" style="display: none;">
     </div>
@@ -226,7 +226,7 @@
 
   <div id="load-session-dialog" class="dialog hidden">
     <h3 class="dialog-title">Load Session</h3>
-    <p class="dialog-description warning-text"><i class="fas fa-exclamation-triangle"></i> This will close all current tabs and replace them with the saved session.</p>
+    <p class="dialog-description warning-text"><i class="ph ph-warning"></i> This will close all current tabs and replace them with the saved session.</p>
     <div class="session-load-options">
       <label class="radio-option">
         <input type="radio" name="load-mode" value="replace" checked>
@@ -244,7 +244,7 @@
   </div>
 
   <div id="tag-manager-dialog" class="dialog hidden">
-    <h3 class="dialog-title"><i class="fas fa-tags"></i> Tag Manager</h3>
+    <h3 class="dialog-title"><i class="ph ph-tag"></i> Tag Manager</h3>
     <p class="dialog-description">Manage all tags used across your tabs and notes.</p>
 
     <div class="tag-manager-add">

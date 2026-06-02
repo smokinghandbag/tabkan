@@ -7,9 +7,10 @@
   "homepage": "https://github.com/smokinghandbag/tabkan",
   "type": "module",
   "scripts": {
-    "check": "for f in background.js sidepanel.js popup.js src/*.js scripts/smoke.mjs; do node --check \"$f\" || exit 1; done && node --input-type=commonjs -e \"JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest.json valid')\"",
+    "check": "for f in background.js sidepanel.js popup.js src/*.js scripts/smoke.mjs scripts/*.test.mjs; do node --check \"$f\" || exit 1; done && node --input-type=commonjs -e \"JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest.json valid')\"",
+    "unit": "node --test scripts/*.test.mjs",
     "smoke": "node scripts/smoke.mjs .",
-    "test": "npm run check && npm run smoke",
+    "test": "npm run check && npm run unit && npm run smoke",
     "package": "bash scripts/package.sh"
   },
   "devDependencies": {

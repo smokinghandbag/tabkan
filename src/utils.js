@@ -23,6 +23,23 @@ export const getFaviconUrl = (url) => {
   }
 };
 
+// --- drag-vs-click discrimination ---------------------------------------
+// A click that follows a drag of more than DRAG_CLICK_THRESHOLD_PX should be
+// treated as the *end of a drag*, not a click. Tiles are draggable, so without
+// this a small accidental drag fires the tile's primary action.
+export const DRAG_CLICK_THRESHOLD_PX = 5;
+
+// Squared distance between two {x,y} points (avoids a sqrt).
+export const distanceSq = (ax, ay, bx, by) => {
+  const dx = ax - bx, dy = ay - by;
+  return dx * dx + dy * dy;
+};
+
+// Given a pointer-down origin and the click point, did the pointer move far
+// enough to count as a drag? threshold defaults to DRAG_CLICK_THRESHOLD_PX.
+export const movedLikeDrag = (downX, downY, upX, upY, threshold = DRAG_CLICK_THRESHOLD_PX) =>
+  distanceSq(downX, downY, upX, upY) > threshold * threshold;
+
 // Debug logging (flip DEBUG to true to trace render/drag flow).
 export const DEBUG = false;
 export const log = (...args) => DEBUG && console.log(...args);

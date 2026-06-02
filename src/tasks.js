@@ -72,7 +72,7 @@ export const renderCollapsedTaskRollup = async (allTasks = null) => {
     const hasIncomplete = incompleteTasks > 0;
     collapsedTaskRollup.innerHTML = `
       <div class="collapsed-task-icon">
-        <i class="fas fa-tasks"></i>
+        <i class="ph ph-list-checks"></i>
       </div>
       <div class="collapsed-task-stats ${hasIncomplete ? 'has-incomplete' : ''}">
         ${completedTasks}/${totalTasks}
@@ -119,7 +119,7 @@ export const renderTaskRollup = async (allTasks = null) => {
     taskRollupContainer.innerHTML = `
       <div class="task-rollup-card ${isCardCollapsed ? 'collapsed' : ''}">
         <div class="task-rollup-header" data-card-id="task-rollup-card">
-          <i class="fas fa-chevron-${isCardCollapsed ? 'right' : 'down'} task-rollup-toggle"></i>
+          <i class="ph ph-caret-${isCardCollapsed ? 'right' : 'down'} task-rollup-toggle"></i>
           <div class="task-rollup-title">
             <span>All Tasks</span>
           </div>
@@ -140,7 +140,7 @@ export const renderTaskRollup = async (allTasks = null) => {
                 <div class="task-rollup-content-inner">
                   <div class="task-rollup-text">${escapeHtml(task.text)}</div>
                   <div class="task-rollup-source">
-                    ${task.tabFavicon ? `<img src="${getFaviconUrl(task.tabUrl)}" alt="">` : '<i class="fas fa-file"></i>'}
+                    ${task.tabFavicon ? `<img src="${getFaviconUrl(task.tabUrl)}" alt="">` : '<i class="ph ph-file"></i>'}
                     <span>${escapeHtml(task.tabTitle)}</span>
                   </div>
                 </div>
@@ -162,7 +162,7 @@ export const renderTaskRollup = async (allTasks = null) => {
       card.classList.toggle('collapsed');
       const isCollapsed = card.classList.contains('collapsed');
       state.collapsedCards['task-rollup-card'] = isCollapsed;
-      cardToggle.className = `fas fa-chevron-${isCollapsed ? 'right' : 'down'} task-rollup-toggle`;
+      cardToggle.className = `ph ph-caret-${isCollapsed ? 'right' : 'down'} task-rollup-toggle`;
       saveData(false);
     });
 

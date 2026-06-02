@@ -9,6 +9,7 @@ CLAUDE.md
 scripts/promo.html
 scripts/store/
 docs/CHROME_WEB_STORE.md
+docs/UX_REFRESH_SPEC.md
 
 # Local deploy secrets — never commit
 .env
