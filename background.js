@@ -78,11 +78,11 @@ const notifyDashboardToRender = async () => {
 // Listen for tab and tab group changes to keep the dashboard updated.
 // Note: Side panel updates automatically via its own event listeners
 chrome.tabs.onCreated.addListener(() => {
-  notifyDashboardToRender();
+  debouncedNotifyDashboard();
 });
 
 chrome.tabs.onRemoved.addListener(() => {
-  notifyDashboardToRender();
+  debouncedNotifyDashboard();
 });
 
 chrome.tabs.onMoved.addListener(async () => {
@@ -136,17 +136,18 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 chrome.tabGroups.onCreated.addListener(() => {
-  notifyDashboardToRender();
+  debouncedNotifyDashboard();
 });
 
 chrome.tabGroups.onRemoved.addListener(() => {
-  notifyDashboardToRender();
+  debouncedNotifyDashboard();
 });
 
 // Combined listener for tab group updates - handles both dashboard render and auto-collapse
 chrome.tabGroups.onUpdated.addListener(async (group) => {
-  // Notify dashboard to render
-  notifyDashboardToRender();
+  // Notify dashboard to render (debounced so an auto-collapse cascade — each
+  // collapse re-fires onUpdated — coalesces into a single render instead of a storm)
+  debouncedNotifyDashboard();
 
   // Read settings from storage to ensure the latest value is used
   const { settings } = await chrome.storage.sync.get('settings');

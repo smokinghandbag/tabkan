@@ -5,6 +5,18 @@ All notable changes to the **TabKan** extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.0.1] — 2026-06-02
+
+### Fixed
+- **Dashboard no longer reloads itself on Brave and other Chromium-based
+  browsers.** The extension-context watchdog now uses a genuine liveness check
+  and only runs while the dashboard is visible, instead of force-reloading the
+  page when the background service worker was merely suspended (which Chromium
+  browsers do aggressively). This stops the "tab keeps refreshing" loop.
+- Smoother board updates: tab and tab-group changes are now debounced
+  consistently, so a burst of changes (e.g. an auto-collapse cascade) coalesces
+  into a single re-render instead of a flicker storm.
+
 ## [5.0] — 2026-06-02
 
 A focused UX refresh of the dashboard: clearer interactions, a cleaner toolbar,
@@ -54,5 +66,6 @@ First public, open-source release.
 - Stored-XSS hardening across the dashboard and side panel (all untrusted data
   escaped before rendering); tightened Content Security Policy.
 
+[5.0.1]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.0.1
 [5.0]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.0
 [4.4]: https://github.com/smokinghandbag/tabkan/releases/tag/v4.4

@@ -199,7 +199,29 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
   let extensionCheckFailures = 0;
   let pageLoadTime = Date.now();
 
+  // A genuine liveness probe. `chrome.runtime.id` can read falsy transiently on
+  // Chromium-based browsers (notably Brave) while the MV3 service worker is
+  // suspended/throttled, even though the context is perfectly valid — gating a
+  // page reload on that alone caused spurious "constant refresh" loops. Calling
+  // into the API and catching the real "Extension context invalidated" throw is
+  // the only reliable signal that the context is actually gone.
+  const isExtensionContextValid = () => {
+    try {
+      // Throws synchronously only when the context is truly invalidated.
+      return Boolean(chrome.runtime?.id) && typeof chrome.runtime.getURL('') === 'string';
+    } catch {
+      return false;
+    }
+  };
+
   const checkExtensionContext = () => {
+    // Only run while the dashboard is actually visible. A backgrounded tab has
+    // no need to self-heal until the user returns to it, and skipping the work
+    // avoids reload loops triggered by background-tab throttling on Brave/Chromium.
+    if (document.visibilityState !== 'visible') {
+      return;
+    }
+
     const timeSinceLoad = Date.now() - pageLoadTime;
 
     // Don't check immediately after page load to avoid false positives during initialization
@@ -212,7 +234,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
       return;
     }
 
-    if (!chrome.runtime?.id) {
+    if (!isExtensionContextValid()) {
       extensionCheckFailures++;
 
       // Only reload after multiple consecutive failures
