@@ -1702,8 +1702,10 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     }
   });
 
-  const sessionsBtn = document.getElementById("sessions-btn");
-  sessionsBtn.addEventListener("click", async () => {
+  // Sessions now lives inside the Settings dialog ("Save & Restore").
+  const openSessionsBtn = document.getElementById("open-sessions-btn");
+  openSessionsBtn.addEventListener("click", async () => {
+    hideDialog(settingsDialog);
     await renderSessions();
     showDialog(sessionsDialog);
   });

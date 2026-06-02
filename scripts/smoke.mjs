@@ -116,8 +116,10 @@ try {
   const search = doc.getElementById('search-input');
   if (search) { search.value = 'example'; fire(search, 'input'); }
   await new Promise(r => setTimeout(r, 400)); // debounced render
-  fire(doc.getElementById('sessions-btn'), 'click');     // sessions.js renderSessions
-  fire(doc.getElementById('tag-manager-btn'), 'click');  // tag manager
+  // Sessions now opens from inside Settings (Block 3).
+  fire(doc.getElementById('settings-btn'), 'click');       // open settings dialog
+  fire(doc.getElementById('open-sessions-btn'), 'click');  // → sessions.js renderSessions
+  fire(doc.getElementById('tag-manager-btn'), 'click');    // tag manager (now inline w/ filters)
   fire(doc.getElementById('toggle-all-cards-btn'), 'click');
   await new Promise(r => setTimeout(r, 200));
 } catch (err) {
@@ -228,6 +230,18 @@ if (errors.length) {
   console.error(`RUNTIME ERRORS after search/filter (${errors.length}):`);
   for (const e of errors.slice(0, 8)) console.error(' -', e && e.stack ? e.stack.split('\n').slice(0,4).join('\n') : e);
   process.exit(1);
+}
+
+// --- Block 3: toolbar layout (sessions moved into settings) -------------
+{
+  const removedSessionsBtn = doc.getElementById('sessions-btn');           // should be gone
+  const sessionsInSettings = doc.getElementById('open-sessions-btn');      // should exist
+  const tagBtnInline = doc.querySelector('.tag-filter-container #tag-manager-btn'); // moved inline
+  console.log(`toolbar: sessions moved into settings: ${!removedSessionsBtn && !!sessionsInSettings}`);
+  console.log(`toolbar: tag-manager inline with filters: ${!!tagBtnInline}`);
+  if (removedSessionsBtn || !sessionsInSettings || !tagBtnInline) {
+    console.error('FAIL: Block 3 toolbar layout not as expected'); process.exit(1);
+  }
 }
 
 console.log('SMOKE PASS ✅');

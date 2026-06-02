@@ -856,7 +856,6 @@ h1 {
 .search-wrapper {
   flex: 1;
   min-width: 200px;
-  margin-right: -1rem;
 }
 
 
@@ -1798,6 +1797,19 @@ li .title {
   font-weight: 600;
   color: var(--muted-foreground);
   white-space: nowrap;
+}
+
+/* Inline "manage tags" button, sits with the tag-filter row */
+.tag-manage-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; flex-shrink: 0;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: none; color: var(--muted-foreground); cursor: pointer;
+  font-size: 0.9rem; transition: color 0.2s, border-color 0.2s, background-color 0.2s;
+}
+.tag-manage-btn:hover {
+  color: var(--primary); border-color: var(--primary);
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
 .filter-buttons {

@@ -52,23 +52,20 @@
           <button id="toggle-all-cards-btn" class="settings-btn" title="Collapse All Cards" aria-label="Collapse all cards">
             <i class="ph ph-arrows-in-line-horizontal"></i>
           </button>
-          <button id="tag-manager-btn" class="settings-btn" title="Tag Manager" aria-label="Open tag manager">
-            <i class="ph ph-tag"></i>
-          </button>
-          <button id="sessions-btn" class="settings-btn" title="Sessions" aria-label="Open sessions">
-            <i class="ph ph-floppy-disk"></i>
-          </button>
-          <button id="settings-btn" class="settings-btn" title="Settings" aria-label="Open settings">
-            <i class="ph ph-gear"></i>
-          </button>
           <div class="search-wrapper">
             <input type="text" id="search-input" placeholder="Search tabs...">
             <button id="search-clear" class="search-clear hidden" title="Clear search" aria-label="Clear search"><i class="ph ph-x"></i></button>
           </div>
+          <button id="settings-btn" class="settings-btn" title="Settings" aria-label="Open settings">
+            <i class="ph ph-gear"></i>
+          </button>
         </div>
 
         <div class="filter-container tag-filter-container">
           <label class="filter-label">Tags:</label>
+          <button id="tag-manager-btn" class="tag-manage-btn" title="Manage tags" aria-label="Manage tags">
+            <i class="ph ph-tag"></i>
+          </button>
           <div class="filter-buttons tag-filters" id="tag-filters">
             <button class="filter-btn tag-filter active" data-tag="all">All</button>
           </div>
@@ -194,6 +191,15 @@
         </div>
         <button id="open-sidebar-btn" class="btn btn-primary">
           <i class="ph ph-sidebar-simple"></i> Open Sidebar
+        </button>
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <label class="setting-label">Sessions</label>
+          <p class="setting-description">Save and restore your complete workspace — all tab groups, tabs, notes, and tasks — as a named session.</p>
+        </div>
+        <button id="open-sessions-btn" class="btn btn-primary">
+          <i class="ph ph-floppy-disk"></i> Save &amp; Restore
         </button>
       </div>
     </div>
