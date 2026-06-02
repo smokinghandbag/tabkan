@@ -806,8 +806,9 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     const taskBadgeClass = allTasksComplete ? 'task-badge-complete' : (incompleteTasks > 0 ? 'task-badge-incomplete' : '');
     const taskBadgeHTML = todos.length > 0 ? `<span class="task-badge ${taskBadgeClass}" title="${incompleteTasks} incomplete task${incompleteTasks !== 1 ? 's' : ''}"><i class="ph ph-list-checks"></i> ${incompleteTasks}</span>` : '';
 
-    const linkActions = `<div class="link-actions">${taskBadgeHTML}<button class="action-button open-tab" title="Open Tab"><i class="ph ph-arrow-square-out"></i></button></div>`;
-    const tagsHTML = tags.length > 0 ? `<div class="tags-container">${tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</div>` : '';
+    const linkActions = `<div class="link-actions">${taskBadgeHTML}<button class="action-button tab-edit" title="Edit tab"><i class="ph ph-dots-three"></i></button><button class="action-button tab-copy" title="Copy URL"><i class="ph ph-copy"></i></button></div>`;
+    // Tag chips are clickable filter shortcuts (data-tag drives toggleTagFilter).
+    const tagsHTML = tags.length > 0 ? `<div class="tags-container">${tags.map(tag => `<span class="tag" data-tag="${escapeHtml(tag)}" title="Filter by #${escapeHtml(tag)}">${escapeHtml(tag)}</span>`).join('')}</div>` : '';
     const notesHTML = notes ? `<div class="notes-container"><p>${escapeHtml(notes)}</p></div>` : '';
     const todosSummaryHTML = todos.length > 0 ? `
       <div class="todos-summary">
@@ -883,16 +884,43 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
       });
     });
 
-    listItem.querySelector(".title").addEventListener("click", () => {
-      if (wasDragGesture()) return; // ignore the click that ends a drag
-      openEditDialog(tab, (newTitle, newTags, newNotes, newTodos) => {
-        state.tabMetadata[tab.url] = { title: newTitle, tags: newTags, notes: newNotes, todos: newTodos };
-        saveData();
-      });
+    // Open the full edit dialog for this tab.
+    const openEdit = () => openEditDialog(tab, (newTitle, newTags, newNotes, newTodos) => {
+      state.tabMetadata[tab.url] = { title: newTitle, tags: newTags, notes: newNotes, todos: newTodos };
+      saveData();
     });
 
-    listItem.querySelector(".open-tab").addEventListener("click", async () => {
+    // One delegated click handler per tile, dispatched by zone. Click-zone model
+    // (v5): body = open/switch to the tab; tag chip = filter board by that tag;
+    // notes/todos preview = open editor; ⋯ = edit; copy = copy URL.
+    listItem.addEventListener("click", async (e) => {
       if (wasDragGesture()) return; // ignore the click that ends a drag
+
+      const tagChip = e.target.closest('.tags-container .tag');
+      if (tagChip && tagChip.dataset.tag) {
+        toggleTagFilter(tagChip.dataset.tag);
+        return;
+      }
+      if (e.target.closest('.tab-edit')) { openEdit(); return; }
+      if (e.target.closest('.tab-copy')) {
+        const btn = e.target.closest('.tab-copy');
+        try {
+          await navigator.clipboard.writeText(tab.url);
+          btn.classList.add('copied');
+          const icon = btn.querySelector('i');
+          if (icon) icon.className = 'ph ph-check';
+          setTimeout(() => {
+            btn.classList.remove('copied');
+            if (icon) icon.className = 'ph ph-copy';
+          }, 1200);
+        } catch { /* clipboard unavailable; no-op */ }
+        return;
+      }
+      if (e.target.closest('.notes-container') || e.target.closest('.todos-summary')) {
+        openEdit();
+        return;
+      }
+      // Default zone (favicon, title, empty tile body) = open/switch to the tab.
       await chrome.tabs.update(tab.id, { active: true });
       await chrome.windows.update(tab.windowId, { focused: true });
     });
@@ -1689,20 +1717,26 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     debouncedRender();
   });
 
+  // Toggle a tag in the active filter set. 'all' resets to show everything;
+  // any other tag is added/removed (and we fall back to 'all' when none remain).
+  // Shared by the toolbar filter buttons and tile tag-chip clicks.
+  const toggleTagFilter = (filterValue) => {
+    if (filterValue === 'all') {
+      ui.activeTagFilters.clear();
+      ui.activeTagFilters.add('all');
+    } else {
+      ui.activeTagFilters.delete('all');
+      if (ui.activeTagFilters.has(filterValue)) ui.activeTagFilters.delete(filterValue);
+      else ui.activeTagFilters.add(filterValue);
+      if (ui.activeTagFilters.size === 0) ui.activeTagFilters.add('all');
+    }
+    render();
+  };
+
   const setupFilterButtons = () => {
     document.querySelector('.filters-search-container').addEventListener('click', (e) => {
       if (e.target.classList.contains('tag-filter')) {
-        const filterValue = e.target.dataset.tag;
-        if (filterValue === 'all') {
-          ui.activeTagFilters.clear();
-          ui.activeTagFilters.add('all');
-        } else {
-          ui.activeTagFilters.delete('all');
-          if (ui.activeTagFilters.has(filterValue)) ui.activeTagFilters.delete(filterValue);
-          else ui.activeTagFilters.add(filterValue);
-          if (ui.activeTagFilters.size === 0) ui.activeTagFilters.add('all');
-        }
-        render();
+        toggleTagFilter(e.target.dataset.tag);
       }
     });
   };

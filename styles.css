@@ -1425,6 +1425,17 @@ li {
   position: relative;
 }
 
+/* Tile body is the primary "open tab" target (v5 click-zone model). */
+.tab-item { cursor: pointer; }
+.tab-item:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
+/* The interactive sub-zones get their own affordance / stop the pointer cursor. */
+.tab-item .tags-container .tag,
+.tab-item .notes-container,
+.tab-item .todos-summary,
+.tab-item .action-button { cursor: pointer; }
+/* Copy-URL confirmation flash. */
+.tab-item .tab-copy.copied { color: var(--success, #1E8E3E); }
+
 .link-content {
   flex: 1;
   display: flex;
@@ -1524,11 +1535,20 @@ li .title {
 .tag {
   color: var(--muted-foreground);
   font-weight: 500;
-  transition: color 0.2s;
+  transition: color 0.2s, background-color 0.2s;
 }
 
-.tag:hover {
+/* Tile tag chips are clickable filter shortcuts. */
+.tags-container .tag {
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 4px;
+  margin: 0 -2px;
+}
+
+.tags-container .tag:hover {
   color: var(--primary);
+  background-color: color-mix(in srgb, var(--primary) 14%, transparent);
 }
 
 .tag::before {
