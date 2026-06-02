@@ -189,6 +189,47 @@ if (errors.length) {
   process.exit(1);
 }
 
+// --- Block 2: search/filter status + empty state ------------------------
+try {
+  const search = doc.getElementById('search-input');
+  const clearBtn = doc.getElementById('search-clear');
+  const status = doc.getElementById('filter-status');
+  const count = doc.getElementById('result-count');
+
+  // (a) A matching search reveals the clear button, status bar, and a count.
+  search.value = 'example'; fire(search, 'input');
+  await new Promise(r => setTimeout(r, 450));
+  const clearShown = clearBtn && !clearBtn.classList.contains('hidden');
+  const statusShown = status && !status.classList.contains('hidden');
+  console.log(`search shows clear+status: ${clearShown && statusShown}`);
+  console.log(`result count text: "${count && count.textContent}"`);
+  if (!clearShown || !statusShown) { console.error('FAIL: search did not reveal clear button / status bar'); process.exit(1); }
+  if (!/\btab(s)?\b/.test(count.textContent || '')) { console.error('FAIL: result count missing'); process.exit(1); }
+
+  // (b) A no-match search shows the empty state.
+  search.value = 'zzz-no-such-tab-xyz'; fire(search, 'input');
+  await new Promise(r => setTimeout(r, 450));
+  const emptyState = doc.querySelector('#cards-container .board-empty-state');
+  console.log(`empty state on no match: ${!!emptyState}`);
+  if (!emptyState) { console.error('FAIL: no empty state shown for a zero-match search'); process.exit(1); }
+
+  // (c) Clearing search hides the status bar and restores the board.
+  clearBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 450));
+  const statusHidden = status.classList.contains('hidden');
+  const boardBack = !!doc.querySelector('#cards-container .card');
+  console.log(`clear restores board: ${statusHidden && boardBack}`);
+  if (!statusHidden || !boardBack) { console.error('FAIL: clearing search did not restore the board'); process.exit(1); }
+} catch (err) {
+  console.error('SEARCH/FILTER ERROR:\n', err);
+  process.exit(1);
+}
+if (errors.length) {
+  console.error(`RUNTIME ERRORS after search/filter (${errors.length}):`);
+  for (const e of errors.slice(0, 8)) console.error(' -', e && e.stack ? e.stack.split('\n').slice(0,4).join('\n') : e);
+  process.exit(1);
+}
+
 console.log('SMOKE PASS ✅');
 // The loaded app sets a setInterval (extension-context check) + other timers that
 // keep Node's event loop alive, so exit explicitly on success.

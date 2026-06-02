@@ -62,15 +62,25 @@
           <button class="settings-btn"><i class="ph ph-tag"></i></button>
           <button class="settings-btn"><i class="ph ph-floppy-disk"></i></button>
           <button class="settings-btn"><i class="ph ph-gear"></i></button>
-          <div class="search-wrapper"><input id="search-input" placeholder="Search tabs..."></div>
+          <div class="search-wrapper">
+            <input id="search-input" placeholder="Search tabs..." value="roadmap">
+            <button id="search-clear" class="search-clear" title="Clear search"><i class="ph ph-x"></i></button>
+          </div>
         </div>
         <div class="filter-container tag-filter-container">
           <label class="filter-label">Tags:</label>
           <div class="filter-buttons tag-filters" id="tag-filters">
-            <button class="filter-btn tag-filter active" data-tag="all">All</button>
-            <button class="filter-btn tag-filter" data-tag="work">work</button>
+            <button class="filter-btn tag-filter" data-tag="all">All</button>
+            <button class="filter-btn tag-filter active" data-tag="work">work</button>
             <button class="filter-btn tag-filter" data-tag="research">research</button>
           </div>
+        </div>
+        <div id="filter-status" class="filter-status">
+          <span id="result-count" class="result-count">1 tab · 0 bookmarks match</span>
+          <span id="active-filter-chips" class="active-filter-chips">
+            <button class="filter-chip" data-tag="work">#work <i class="ph ph-x"></i></button>
+          </span>
+          <button id="clear-filters" class="clear-filters">Clear all</button>
         </div>
       </div>
       <div id="cards-container" class="fullpage-cards-grid">

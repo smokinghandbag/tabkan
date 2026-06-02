@@ -76,6 +76,11 @@ export const tagManagerDialog = {
     input: document.getElementById("tag-manager-input"),
   };
 export const searchInput = document.getElementById("search-input");
+export const searchClearBtn = document.getElementById("search-clear");
+export const filterStatus = document.getElementById("filter-status");
+export const resultCount = document.getElementById("result-count");
+export const activeFilterChips = document.getElementById("active-filter-chips");
+export const clearFiltersBtn = document.getElementById("clear-filters");
 export const sidebar = document.querySelector(".sidebar");
 export const sidebarToggle = document.getElementById("sidebar-toggle");
 export const sidebarCollapseBtn = document.getElementById("sidebar-collapse-btn");

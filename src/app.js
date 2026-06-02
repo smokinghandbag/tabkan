@@ -16,8 +16,9 @@ import {
   editNoteDialog, settingsDialog, sessionsDialog, saveSessionDialog, loadSessionDialog,
   tagManagerDialog, searchInput, sidebar, sidebarToggle, sidebarCollapseBtn,
   collapsedFavicons, tabBin, tabBinCollapsed, bookmarksCardContainer, taskRollupContainer,
+  searchClearBtn, filterStatus, resultCount, activeFilterChips, clearFiltersBtn,
 } from './dom.js';
-import { renderBookmarksIfDirty, invalidateBookmarkCache } from './bookmarks.js';
+import { renderBookmarksIfDirty, invalidateBookmarkCache, countBookmarkMatches } from './bookmarks.js';
 import { hasUnfinishedTasks, getUnfinishedTasks, aggregateAllTasks, renderTaskRollup, renderCollapsedTaskRollup } from './tasks.js';
 import { renderSessions, saveSession, loadSession, importSession } from './sessions.js';
 
@@ -516,6 +517,36 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     updateTagFilters();
   };
 
+  // Filter-status bar: live result count, active tag chips, "clear all".
+  // `tabMatchCount` is the number of currently-visible tabs (computed in render).
+  const updateFilterStatus = (tabMatchCount) => {
+    if (!filterStatus) return;
+    const activeTags = Array.from(ui.activeTagFilters).filter(t => t !== 'all');
+    const filtering = !!ui.searchTerm || activeTags.length > 0;
+
+    // The whole bar only shows while a filter is active.
+    filterStatus.classList.toggle('hidden', !filtering);
+    if (!filtering) { activeFilterChips.replaceChildren(); resultCount.textContent = ''; return; }
+
+    // Result count: include bookmark matches only when there's a search term.
+    const bmCount = ui.searchTerm ? countBookmarkMatches() : 0;
+    const tabLabel = `${tabMatchCount} tab${tabMatchCount === 1 ? '' : 's'}`;
+    resultCount.textContent = ui.searchTerm
+      ? `${tabLabel} · ${bmCount} bookmark${bmCount === 1 ? '' : 's'} match`
+      : `${tabLabel}`;
+
+    // Active tag filters as removable chips.
+    activeFilterChips.replaceChildren();
+    activeTags.forEach(tag => {
+      const chip = document.createElement('button');
+      chip.className = 'filter-chip';
+      chip.dataset.tag = tag;
+      chip.title = `Remove #${tag} filter`;
+      chip.innerHTML = `#${escapeHtml(tag)} <i class="ph ph-x"></i>`;
+      activeFilterChips.appendChild(chip);
+    });
+  };
+
   const updateFilterButtonsState = () => {
     document.querySelectorAll('.tag-filter').forEach(btn => {
       btn.classList.toggle('active', ui.activeTagFilters.has(btn.dataset.tag));
@@ -685,15 +716,20 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
 
       const sortedGroups = groupsWithContent.sort((a, b) => groupOrderMap[a.id] - groupOrderMap[b.id]);
 
+      const isFiltering = !!ui.searchTerm || !ui.activeTagFilters.has('all');
+      let visibleTabCount = 0;
+
       sortedGroups.forEach((group, index) => {
         const tabs = tabsByGroup[group.id] || [];
         const items = tabs;
 
-        // Check if any items match search/tag filters
-        const hasVisibleItems = items.some(item => shouldShowItem(item));
+        // Count tabs matching the active search/tag filters (for the status bar).
+        const matchingCount = items.filter(item => shouldShowItem(item)).length;
+        visibleTabCount += isFiltering ? matchingCount : items.length;
+        const hasVisibleItems = matchingCount > 0;
 
         // Skip cards with no visible items when filtering
-        if ((ui.searchTerm || !ui.activeTagFilters.has('all')) && !hasVisibleItems) {
+        if (isFiltering && !hasVisibleItems) {
           return; // Don't render this card
         }
 
@@ -746,11 +782,25 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
         
         cardsContainer.appendChild(cardElement);
       });
-      const createCardLink = document.createElement("div");
-      createCardLink.className = "create-card-link";
-      createCardLink.innerHTML = `+ New Group`;
-      createCardLink.addEventListener("click", openCreateCardDialog);
-      cardsContainer.appendChild(createCardLink);
+
+      // Empty state: filtering is active but no tab matched. Show a message
+      // instead of a blank board (the "+ New Group" link is hidden here).
+      if (isFiltering && visibleTabCount === 0) {
+        const empty = document.createElement("div");
+        empty.className = "board-empty-state";
+        empty.innerHTML = `<i class="ph ph-magnifying-glass"></i><p>No tabs match your search or filters.</p><button class="board-empty-clear">Clear filters</button>`;
+        empty.querySelector('.board-empty-clear').addEventListener('click', () => clearFiltersBtn.click());
+        cardsContainer.appendChild(empty);
+      } else {
+        const createCardLink = document.createElement("div");
+        createCardLink.className = "create-card-link";
+        createCardLink.innerHTML = `+ New Group`;
+        createCardLink.addEventListener("click", openCreateCardDialog);
+        cardsContainer.appendChild(createCardLink);
+      }
+
+      // Update the filter-status bar (count + active-tag chips).
+      updateFilterStatus(visibleTabCount);
 
       // Restore scroll positions after rendering
       cardsContainer.scrollLeft = horizontalScrollPosition;
@@ -1712,9 +1762,35 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
 
   searchInput.addEventListener("input", e => {
     ui.searchTerm = e.target.value;
+    searchClearBtn.classList.toggle('hidden', !ui.searchTerm);
     // Debounce: every keystroke previously triggered a full async render
     // (tab/group queries, tab reordering, storage writes, full DOM rebuild).
     debouncedRender();
+  });
+
+  // Clear (×) button inside the search field.
+  searchClearBtn.addEventListener("click", () => {
+    ui.searchTerm = '';
+    searchInput.value = '';
+    searchClearBtn.classList.add('hidden');
+    searchInput.focus();
+    render();
+  });
+
+  // "Clear all" resets both the search term and tag filters.
+  clearFiltersBtn.addEventListener("click", () => {
+    ui.searchTerm = '';
+    searchInput.value = '';
+    searchClearBtn.classList.add('hidden');
+    ui.activeTagFilters.clear();
+    ui.activeTagFilters.add('all');
+    render();
+  });
+
+  // Remove a single active tag filter by clicking its chip's ×.
+  activeFilterChips.addEventListener("click", (e) => {
+    const chip = e.target.closest('.filter-chip[data-tag]');
+    if (chip) toggleTagFilter(chip.dataset.tag); // toggle off (it's active) + render
   });
 
   // Toggle a tag in the active filter set. 'all' resets to show everything;
