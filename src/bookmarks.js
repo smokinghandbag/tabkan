@@ -268,13 +268,14 @@ export const renderBookmarks = async () => {
         await chrome.tabs.create({ url: 'chrome://bookmarks/' });
       });
 
-      // Add event listeners for folder toggle (read-only view)
+      // Add event listeners for folder toggle (read-only view). The whole
+      // header row toggles the folder (not just the chevron).
       bookmarksCardContainer.querySelectorAll('.bookmark-folder-header').forEach(header => {
         const folder = header.parentElement;
         const folderId = folder.dataset.folderId;
 
         const folderToggle = header.querySelector('.folder-toggle');
-        folderToggle.addEventListener('click', (e) => {
+        header.addEventListener('click', (e) => {
           e.stopPropagation();
 
           // Folders render nested inside their parent's .bookmark-folder-content,

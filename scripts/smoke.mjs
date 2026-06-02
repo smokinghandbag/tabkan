@@ -249,15 +249,19 @@ if (errors.length) {
   if (!nowExpanded) { console.error('FAIL: folder toggle did not expand'); process.exit(1); }
 }
 
-// --- Block 3: toolbar layout (sessions moved into settings) -------------
+// --- Block 3/refresh: combined toolbar row ------------------------------
 {
   const removedSessionsBtn = doc.getElementById('sessions-btn');           // should be gone
   const sessionsInSettings = doc.getElementById('open-sessions-btn');      // should exist
-  const tagBtnInline = doc.querySelector('.tag-filter-container #tag-manager-btn'); // moved inline
+  // Search, the three action buttons, and the tag filters now share one row.
+  const actions = doc.querySelector('.top-filters .toolbar-actions');
+  const tagBtnInActions = doc.querySelector('.toolbar-actions #tag-manager-btn');
+  const tagsInRow = doc.querySelector('.top-filters #tag-filters');
+  const searchInRow = doc.querySelector('.top-filters .search-wrapper');
   console.log(`toolbar: sessions moved into settings: ${!removedSessionsBtn && !!sessionsInSettings}`);
-  console.log(`toolbar: tag-manager inline with filters: ${!!tagBtnInline}`);
-  if (removedSessionsBtn || !sessionsInSettings || !tagBtnInline) {
-    console.error('FAIL: Block 3 toolbar layout not as expected'); process.exit(1);
+  console.log(`toolbar: combined row (search+actions+tags): ${!!(searchInRow && actions && tagBtnInActions && tagsInRow)}`);
+  if (removedSessionsBtn || !sessionsInSettings || !actions || !tagBtnInActions || !tagsInRow || !searchInRow) {
+    console.error('FAIL: combined toolbar layout not as expected'); process.exit(1);
   }
 }
 

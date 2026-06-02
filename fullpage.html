@@ -49,23 +49,21 @@
     <div class="content-area">
       <div class="filters-search-container">
         <div class="top-filters">
-          <button id="toggle-all-cards-btn" class="settings-btn" title="Collapse All Cards" aria-label="Collapse all cards">
-            <i class="ph ph-arrows-in-line-horizontal"></i>
-          </button>
           <div class="search-wrapper">
             <input type="text" id="search-input" placeholder="Search tabs...">
             <button id="search-clear" class="search-clear hidden" title="Clear search" aria-label="Clear search"><i class="ph ph-x"></i></button>
           </div>
-          <button id="settings-btn" class="settings-btn" title="Settings" aria-label="Open settings">
-            <i class="ph ph-gear"></i>
-          </button>
-        </div>
-
-        <div class="filter-container tag-filter-container">
-          <label class="filter-label">Tags:</label>
-          <button id="tag-manager-btn" class="tag-manage-btn" title="Manage tags" aria-label="Manage tags">
-            <i class="ph ph-tag"></i>
-          </button>
+          <div class="toolbar-actions">
+            <button id="settings-btn" class="settings-btn" title="Settings" aria-label="Open settings">
+              <i class="ph ph-gear"></i>
+            </button>
+            <button id="toggle-all-cards-btn" class="settings-btn" title="Collapse All Cards" aria-label="Collapse all cards">
+              <i class="ph ph-arrows-in-line-horizontal"></i>
+            </button>
+            <button id="tag-manager-btn" class="settings-btn" title="Manage tags" aria-label="Manage tags">
+              <i class="ph ph-tag"></i>
+            </button>
+          </div>
           <div class="filter-buttons tag-filters" id="tag-filters">
             <button class="filter-btn tag-filter active" data-tag="all">All</button>
           </div>
