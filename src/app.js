@@ -1476,33 +1476,6 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     saveData(false);
   });
 
-  // Open sidebar button handler
-  const openSidebarBtn = document.getElementById("open-sidebar-btn");
-  openSidebarBtn.addEventListener("click", async () => {
-    try {
-      // Check if Side Panel API is available
-      if (!chrome.sidePanel || !chrome.sidePanel.open) {
-        throw new Error('Side Panel API not available');
-      }
-
-      // Get current window ID
-      const currentWindow = await chrome.windows.getCurrent();
-      await chrome.sidePanel.open({ windowId: currentWindow.id });
-    } catch (error) {
-      console.error('[Tab Ban] Error opening side panel:', error);
-
-      // Show user-friendly message with more details
-      const message = 'Unable to open sidebar.\n\n' +
-        'The Side Panel API requires Chrome 114 or higher.\n\n' +
-        'Instructions:\n' +
-        '1. Check chrome://version/ to verify your Chrome version\n' +
-        '2. Update Chrome if needed (chrome://settings/help)\n' +
-        '3. Alternatively, right-click the Tab Ban icon and select "Open side panel"';
-
-      alert(message);
-    }
-  });
-
   // --- Sessions Dialog Handlers ---
 
   // Toggle all cards expand/collapse
