@@ -7,7 +7,7 @@ import {
   EXTENSION_CHECK_GRACE_PERIOD_MS, EXTENSION_CHECK_RETRY_COUNT,
   SCROLL_ANIMATION_SPEED, EDGE_SCROLL_ZONE_PX,
   FOLDER_INDENT_REM, BOOKMARK_INDENT_REM, FOLDER_HEADER_BASE_REM, DRAG_HANDLE_OFFSET_PX,
-  CHROME_GROUP_COLORS,
+  CHROME_GROUP_COLORS, movedLikeDrag,
 } from './utils.js';
 import { state, ui } from './state.js';
 import {
@@ -16,8 +16,9 @@ import {
   editNoteDialog, settingsDialog, sessionsDialog, saveSessionDialog, loadSessionDialog,
   tagManagerDialog, searchInput, sidebar, sidebarToggle, sidebarCollapseBtn,
   collapsedFavicons, tabBin, tabBinCollapsed, bookmarksCardContainer, taskRollupContainer,
+  searchClearBtn, filterStatus, resultCount, activeFilterChips, clearFiltersBtn,
 } from './dom.js';
-import { renderBookmarksIfDirty, invalidateBookmarkCache } from './bookmarks.js';
+import { renderBookmarksIfDirty, invalidateBookmarkCache, countBookmarkMatches } from './bookmarks.js';
 import { hasUnfinishedTasks, getUnfinishedTasks, aggregateAllTasks, renderTaskRollup, renderCollapsedTaskRollup } from './tasks.js';
 import { renderSessions, saveSession, loadSession, importSession } from './sessions.js';
 
@@ -37,6 +38,10 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
 
   let isRendering = false; // Rendering lock
   let isDragging = false; // Track drag operations
+  // Pointer-down origin, used to tell a real click from the end of a drag.
+  // A tile click handler consults wasDragGesture() before acting.
+  let pointerDownPt = null;
+  let lastGestureWasDrag = false;
   let renderTimeout = null; // Debounce timer for render
   let pendingRender = false; // Flag for queued render
   let editDialogAbortController = null; // AbortController for edit dialog cleanup
@@ -76,7 +81,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     // Populate task list
     taskWarningDialog.list.innerHTML = `
       <ul>
-        ${unfinishedTasks.map(task => `<li><i class="fas fa-circle"></i><span>${escapeHtml(task.text)}</span></li>`).join('')}
+        ${unfinishedTasks.map(task => `<li><i class="ph ph-circle"></i><span>${escapeHtml(task.text)}</span></li>`).join('')}
       </ul>
     `;
 
@@ -127,9 +132,9 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     // Update toggle button icon
     const toggleIcon = sidebarToggle.querySelector("i");
     if (state.sidebarCollapsed) {
-      toggleIcon.className = "fas fa-chevron-right";
+      toggleIcon.className = "ph ph-caret-right";
     } else {
-      toggleIcon.className = "fas fa-chevron-left";
+      toggleIcon.className = "ph ph-caret-left";
     }
 
     saveData(false); // Don't re-render, just save the state
@@ -161,6 +166,23 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
       // Render will be triggered by background script
     }
   });
+
+  // --- drag-vs-click gesture tracking ------------------------------------
+  // Tiles are draggable, so a click that follows a small drag must NOT trigger
+  // the tile's primary action. We record the pointer-down point and, on the
+  // following click, flag whether it moved far enough to count as a drag.
+  // Handlers call wasDragGesture() to bail out when true.
+  document.addEventListener('pointerdown', (e) => {
+    pointerDownPt = { x: e.clientX, y: e.clientY };
+    lastGestureWasDrag = false;
+  }, true);
+  document.addEventListener('pointerup', (e) => {
+    if (pointerDownPt) {
+      lastGestureWasDrag = movedLikeDrag(pointerDownPt.x, pointerDownPt.y, e.clientX, e.clientY);
+    }
+  }, true);
+  // True if the gesture that produced the current click was actually a drag.
+  const wasDragGesture = () => lastGestureWasDrag || isDragging;
 
   chrome.runtime.onMessage.addListener((request) => {
     if (request.action === "render") {
@@ -495,6 +517,36 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     updateTagFilters();
   };
 
+  // Filter-status bar: live result count, active tag chips, "clear all".
+  // `tabMatchCount` is the number of currently-visible tabs (computed in render).
+  const updateFilterStatus = (tabMatchCount) => {
+    if (!filterStatus) return;
+    const activeTags = Array.from(ui.activeTagFilters).filter(t => t !== 'all');
+    const filtering = !!ui.searchTerm || activeTags.length > 0;
+
+    // The whole bar only shows while a filter is active.
+    filterStatus.classList.toggle('hidden', !filtering);
+    if (!filtering) { activeFilterChips.replaceChildren(); resultCount.textContent = ''; return; }
+
+    // Result count: include bookmark matches only when there's a search term.
+    const bmCount = ui.searchTerm ? countBookmarkMatches() : 0;
+    const tabLabel = `${tabMatchCount} tab${tabMatchCount === 1 ? '' : 's'}`;
+    resultCount.textContent = ui.searchTerm
+      ? `${tabLabel} · ${bmCount} bookmark${bmCount === 1 ? '' : 's'} match`
+      : `${tabLabel}`;
+
+    // Active tag filters as removable chips.
+    activeFilterChips.replaceChildren();
+    activeTags.forEach(tag => {
+      const chip = document.createElement('button');
+      chip.className = 'filter-chip';
+      chip.dataset.tag = tag;
+      chip.title = `Remove #${tag} filter`;
+      chip.innerHTML = `#${escapeHtml(tag)} <i class="ph ph-x"></i>`;
+      activeFilterChips.appendChild(chip);
+    });
+  };
+
   const updateFilterButtonsState = () => {
     document.querySelectorAll('.tag-filter').forEach(btn => {
       btn.classList.toggle('active', ui.activeTagFilters.has(btn.dataset.tag));
@@ -664,15 +716,20 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
 
       const sortedGroups = groupsWithContent.sort((a, b) => groupOrderMap[a.id] - groupOrderMap[b.id]);
 
+      const isFiltering = !!ui.searchTerm || !ui.activeTagFilters.has('all');
+      let visibleTabCount = 0;
+
       sortedGroups.forEach((group, index) => {
         const tabs = tabsByGroup[group.id] || [];
         const items = tabs;
 
-        // Check if any items match search/tag filters
-        const hasVisibleItems = items.some(item => shouldShowItem(item));
+        // Count tabs matching the active search/tag filters (for the status bar).
+        const matchingCount = items.filter(item => shouldShowItem(item)).length;
+        visibleTabCount += isFiltering ? matchingCount : items.length;
+        const hasVisibleItems = matchingCount > 0;
 
         // Skip cards with no visible items when filtering
-        if ((ui.searchTerm || !ui.activeTagFilters.has('all')) && !hasVisibleItems) {
+        if (isFiltering && !hasVisibleItems) {
           return; // Don't render this card
         }
 
@@ -725,11 +782,25 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
         
         cardsContainer.appendChild(cardElement);
       });
-      const createCardLink = document.createElement("div");
-      createCardLink.className = "create-card-link";
-      createCardLink.innerHTML = `+ New Group`;
-      createCardLink.addEventListener("click", openCreateCardDialog);
-      cardsContainer.appendChild(createCardLink);
+
+      // Empty state: filtering is active but no tab matched. Show a message
+      // instead of a blank board (the "+ New Group" link is hidden here).
+      if (isFiltering && visibleTabCount === 0) {
+        const empty = document.createElement("div");
+        empty.className = "board-empty-state";
+        empty.innerHTML = `<i class="ph ph-magnifying-glass"></i><p>No tabs match your search or filters.</p><button class="board-empty-clear">Clear filters</button>`;
+        empty.querySelector('.board-empty-clear').addEventListener('click', () => clearFiltersBtn.click());
+        cardsContainer.appendChild(empty);
+      } else {
+        const createCardLink = document.createElement("div");
+        createCardLink.className = "create-card-link";
+        createCardLink.innerHTML = `+ New Group`;
+        createCardLink.addEventListener("click", openCreateCardDialog);
+        cardsContainer.appendChild(createCardLink);
+      }
+
+      // Update the filter-status bar (count + active-tag chips).
+      updateFilterStatus(visibleTabCount);
 
       // Restore scroll positions after rendering
       cardsContainer.scrollLeft = horizontalScrollPosition;
@@ -783,14 +854,15 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     const incompleteTasks = todos.filter(t => !t.completed).length;
     const allTasksComplete = todos.length > 0 && incompleteTasks === 0;
     const taskBadgeClass = allTasksComplete ? 'task-badge-complete' : (incompleteTasks > 0 ? 'task-badge-incomplete' : '');
-    const taskBadgeHTML = todos.length > 0 ? `<span class="task-badge ${taskBadgeClass}" title="${incompleteTasks} incomplete task${incompleteTasks !== 1 ? 's' : ''}"><i class="fas fa-tasks"></i> ${incompleteTasks}</span>` : '';
+    const taskBadgeHTML = todos.length > 0 ? `<span class="task-badge ${taskBadgeClass}" title="${incompleteTasks} incomplete task${incompleteTasks !== 1 ? 's' : ''}"><i class="ph ph-list-checks"></i> ${incompleteTasks}</span>` : '';
 
-    const linkActions = `<div class="link-actions">${taskBadgeHTML}<button class="action-button open-tab" title="Open Tab"><i class="fas fa-external-link-alt"></i></button></div>`;
-    const tagsHTML = tags.length > 0 ? `<div class="tags-container">${tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</div>` : '';
+    const linkActions = `<div class="link-actions">${taskBadgeHTML}<button class="action-button tab-edit" title="Edit tab"><i class="ph ph-dots-three"></i></button><button class="action-button tab-copy" title="Copy URL"><i class="ph ph-copy"></i></button></div>`;
+    // Tag chips are clickable filter shortcuts (data-tag drives toggleTagFilter).
+    const tagsHTML = tags.length > 0 ? `<div class="tags-container">${tags.map(tag => `<span class="tag" data-tag="${escapeHtml(tag)}" title="Filter by #${escapeHtml(tag)}">${escapeHtml(tag)}</span>`).join('')}</div>` : '';
     const notesHTML = notes ? `<div class="notes-container"><p>${escapeHtml(notes)}</p></div>` : '';
     const todosSummaryHTML = todos.length > 0 ? `
       <div class="todos-summary">
-        <i class="fas fa-check-square"></i>
+        <i class="ph ph-check-square"></i>
         <span>${todos.filter(t => t.completed).length}/${todos.length}</span>
       </div>
     ` : '';
@@ -862,14 +934,43 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
       });
     });
 
-    listItem.querySelector(".title").addEventListener("click", () => {
-      openEditDialog(tab, (newTitle, newTags, newNotes, newTodos) => {
-        state.tabMetadata[tab.url] = { title: newTitle, tags: newTags, notes: newNotes, todos: newTodos };
-        saveData();
-      });
+    // Open the full edit dialog for this tab.
+    const openEdit = () => openEditDialog(tab, (newTitle, newTags, newNotes, newTodos) => {
+      state.tabMetadata[tab.url] = { title: newTitle, tags: newTags, notes: newNotes, todos: newTodos };
+      saveData();
     });
 
-    listItem.querySelector(".open-tab").addEventListener("click", async () => {
+    // One delegated click handler per tile, dispatched by zone. Click-zone model
+    // (v5): body = open/switch to the tab; tag chip = filter board by that tag;
+    // notes/todos preview = open editor; ⋯ = edit; copy = copy URL.
+    listItem.addEventListener("click", async (e) => {
+      if (wasDragGesture()) return; // ignore the click that ends a drag
+
+      const tagChip = e.target.closest('.tags-container .tag');
+      if (tagChip && tagChip.dataset.tag) {
+        toggleTagFilter(tagChip.dataset.tag);
+        return;
+      }
+      if (e.target.closest('.tab-edit')) { openEdit(); return; }
+      if (e.target.closest('.tab-copy')) {
+        const btn = e.target.closest('.tab-copy');
+        try {
+          await navigator.clipboard.writeText(tab.url);
+          btn.classList.add('copied');
+          const icon = btn.querySelector('i');
+          if (icon) icon.className = 'ph ph-check';
+          setTimeout(() => {
+            btn.classList.remove('copied');
+            if (icon) icon.className = 'ph ph-copy';
+          }, 1200);
+        } catch { /* clipboard unavailable; no-op */ }
+        return;
+      }
+      if (e.target.closest('.notes-container') || e.target.closest('.todos-summary')) {
+        openEdit();
+        return;
+      }
+      // Default zone (favicon, title, empty tile body) = open/switch to the tab.
       await chrome.tabs.update(tab.id, { active: true });
       await chrome.windows.update(tab.windowId, { focused: true });
     });
@@ -884,11 +985,11 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     return `
       <div class="card-actions">
         <button class="action-button toggle-collapse" title="${isCollapsed ? 'Expand' : 'Collapse'}" data-group-id="${groupId}">
-          <i class="fas fa-${isCollapsed ? 'expand-arrows-alt' : 'compress-arrows-alt'}"></i>
+          <i class="ph ph-${isCollapsed ? 'arrows-out-line-horizontal' : 'arrows-in-line-horizontal'}"></i>
         </button>
-        <button class="action-button move-left" title="Move Left"><i class="fas fa-arrow-left"></i></button>
-        <button class="action-button move-right" title="Move Right"><i class="fas fa-arrow-right"></i></button>
-        <button class="action-button delete-card" title="Delete Group"><i class="fas fa-trash"></i></button>
+        <button class="action-button move-left" title="Move Left"><i class="ph ph-arrow-left"></i></button>
+        <button class="action-button move-right" title="Move Right"><i class="ph ph-arrow-right"></i></button>
+        <button class="action-button delete-card" title="Delete Group"><i class="ph ph-trash"></i></button>
       </div>
     `;
   };
@@ -915,7 +1016,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
       cardElement.className = `card ${isSidebarCardCollapsed ? 'collapsed' : ''}`;
       cardElement.innerHTML = `
         <div class="card-header sidebar-card-header" data-sidebar-card-id="${group.id}">
-          <i class="fas fa-chevron-${isSidebarCardCollapsed ? 'right' : 'down'} sidebar-card-toggle"></i>
+          <i class="ph ph-caret-${isSidebarCardCollapsed ? 'right' : 'down'} sidebar-card-toggle"></i>
           <span data-card-id="${group.id}">${escapeHtml(group.title)}</span>
           <span class="card-stats">${totalItems}</span>
         </div>
@@ -948,7 +1049,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     if (!isSidebar) {
       const openTabButton = document.createElement("button");
       openTabButton.className = "open-tab-btn";
-      openTabButton.innerHTML = '<i class="fas fa-plus"></i> Open new tab';
+      openTabButton.innerHTML = '<i class="ph ph-plus"></i> Open new tab';
       openTabButton.dataset.groupId = group.id;
       cardElement.appendChild(openTabButton);
     }
@@ -1259,7 +1360,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
           }
 
           // Update the icon
-          toggleCollapseBtn.innerHTML = isCurrentlyCollapsed ? '<i class="fas fa-compress-alt"></i>' : '<i class="fas fa-expand-alt"></i>';
+          toggleCollapseBtn.innerHTML = isCurrentlyCollapsed ? '<i class="ph ph-arrows-in-line-horizontal"></i>' : '<i class="ph ph-arrows-out-line-horizontal"></i>';
           toggleCollapseBtn.title = isCurrentlyCollapsed ? 'Collapse' : 'Expand';
 
           // Update the badge
@@ -1302,11 +1403,11 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
           if (isCollapsed) {
             cardElement.classList.remove('collapsed');
             delete state.collapsedCards[`sidebar-${cardId}`];
-            sidebarToggle.className = 'fas fa-chevron-down sidebar-card-toggle';
+            sidebarToggle.className = 'ph ph-caret-down sidebar-card-toggle';
           } else {
             cardElement.classList.add('collapsed');
             state.collapsedCards[`sidebar-${cardId}`] = true;
-            sidebarToggle.className = 'fas fa-chevron-right sidebar-card-toggle';
+            sidebarToggle.className = 'ph ph-caret-right sidebar-card-toggle';
           }
 
           saveData(false);
@@ -1375,33 +1476,6 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     saveData(false);
   });
 
-  // Open sidebar button handler
-  const openSidebarBtn = document.getElementById("open-sidebar-btn");
-  openSidebarBtn.addEventListener("click", async () => {
-    try {
-      // Check if Side Panel API is available
-      if (!chrome.sidePanel || !chrome.sidePanel.open) {
-        throw new Error('Side Panel API not available');
-      }
-
-      // Get current window ID
-      const currentWindow = await chrome.windows.getCurrent();
-      await chrome.sidePanel.open({ windowId: currentWindow.id });
-    } catch (error) {
-      console.error('[Tab Ban] Error opening side panel:', error);
-
-      // Show user-friendly message with more details
-      const message = 'Unable to open sidebar.\n\n' +
-        'The Side Panel API requires Chrome 114 or higher.\n\n' +
-        'Instructions:\n' +
-        '1. Check chrome://version/ to verify your Chrome version\n' +
-        '2. Update Chrome if needed (chrome://settings/help)\n' +
-        '3. Alternatively, right-click the Tab Ban icon and select "Open side panel"';
-
-      alert(message);
-    }
-  });
-
   // --- Sessions Dialog Handlers ---
 
   // Toggle all cards expand/collapse
@@ -1429,7 +1503,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
               // Update the toggle button icon for this card
               const toggleBtn = card.querySelector('.toggle-collapse');
               if (toggleBtn) {
-                toggleBtn.innerHTML = '<i class="fas fa-compress-alt"></i>';
+                toggleBtn.innerHTML = '<i class="ph ph-arrows-in-line-horizontal"></i>';
                 toggleBtn.title = 'Collapse';
               }
 
@@ -1445,7 +1519,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
 
       allCardsCollapsed = false;
       toggleAllCardsBtn.title = "Collapse All Cards";
-      toggleAllCardsBtn.querySelector("i").className = "fas fa-compress-alt";
+      toggleAllCardsBtn.querySelector("i").className = "ph ph-arrows-in-line-horizontal";
     } else {
       // Collapse all cards
       allGroups.forEach(group => {
@@ -1463,7 +1537,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
               // Update the toggle button icon for this card
               const toggleBtn = card.querySelector('.toggle-collapse');
               if (toggleBtn) {
-                toggleBtn.innerHTML = '<i class="fas fa-expand-alt"></i>';
+                toggleBtn.innerHTML = '<i class="ph ph-arrows-out-line-horizontal"></i>';
                 toggleBtn.title = 'Expand';
               }
 
@@ -1487,7 +1561,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
 
       allCardsCollapsed = true;
       toggleAllCardsBtn.title = "Expand All Cards";
-      toggleAllCardsBtn.querySelector("i").className = "fas fa-expand-alt";
+      toggleAllCardsBtn.querySelector("i").className = "ph ph-arrows-out-line-horizontal";
     }
 
     // Save to storage without re-rendering
@@ -1501,7 +1575,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     if (allTags.length === 0) {
       tagManagerDialog.list.innerHTML = `
         <div class="empty-tag-manager">
-          <i class="fas fa-tags"></i>
+          <i class="ph ph-tag"></i>
           <p>No tags yet</p>
           <p style="font-size: 0.875rem;">Tags will appear here when you add them to tabs or notes.</p>
         </div>
@@ -1535,7 +1609,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
         </div>
         <div class="tag-manager-item-actions">
           <button class="action-button delete-tag-btn" title="Delete Tag">
-            <i class="fas fa-trash-alt"></i>
+            <i class="ph ph-trash"></i>
           </button>
         </div>
       </div>
@@ -1601,8 +1675,10 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     }
   });
 
-  const sessionsBtn = document.getElementById("sessions-btn");
-  sessionsBtn.addEventListener("click", async () => {
+  // Sessions now lives inside the Settings dialog ("Save & Restore").
+  const openSessionsBtn = document.getElementById("open-sessions-btn");
+  openSessionsBtn.addEventListener("click", async () => {
+    hideDialog(settingsDialog);
     await renderSessions();
     showDialog(sessionsDialog);
   });
@@ -1661,25 +1737,57 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
 
   searchInput.addEventListener("input", e => {
     ui.searchTerm = e.target.value;
+    searchClearBtn.classList.toggle('hidden', !ui.searchTerm);
     // Debounce: every keystroke previously triggered a full async render
     // (tab/group queries, tab reordering, storage writes, full DOM rebuild).
     debouncedRender();
   });
 
+  // Clear (×) button inside the search field.
+  searchClearBtn.addEventListener("click", () => {
+    ui.searchTerm = '';
+    searchInput.value = '';
+    searchClearBtn.classList.add('hidden');
+    searchInput.focus();
+    render();
+  });
+
+  // "Clear all" resets both the search term and tag filters.
+  clearFiltersBtn.addEventListener("click", () => {
+    ui.searchTerm = '';
+    searchInput.value = '';
+    searchClearBtn.classList.add('hidden');
+    ui.activeTagFilters.clear();
+    ui.activeTagFilters.add('all');
+    render();
+  });
+
+  // Remove a single active tag filter by clicking its chip's ×.
+  activeFilterChips.addEventListener("click", (e) => {
+    const chip = e.target.closest('.filter-chip[data-tag]');
+    if (chip) toggleTagFilter(chip.dataset.tag); // toggle off (it's active) + render
+  });
+
+  // Toggle a tag in the active filter set. 'all' resets to show everything;
+  // any other tag is added/removed (and we fall back to 'all' when none remain).
+  // Shared by the toolbar filter buttons and tile tag-chip clicks.
+  const toggleTagFilter = (filterValue) => {
+    if (filterValue === 'all') {
+      ui.activeTagFilters.clear();
+      ui.activeTagFilters.add('all');
+    } else {
+      ui.activeTagFilters.delete('all');
+      if (ui.activeTagFilters.has(filterValue)) ui.activeTagFilters.delete(filterValue);
+      else ui.activeTagFilters.add(filterValue);
+      if (ui.activeTagFilters.size === 0) ui.activeTagFilters.add('all');
+    }
+    render();
+  };
+
   const setupFilterButtons = () => {
     document.querySelector('.filters-search-container').addEventListener('click', (e) => {
       if (e.target.classList.contains('tag-filter')) {
-        const filterValue = e.target.dataset.tag;
-        if (filterValue === 'all') {
-          ui.activeTagFilters.clear();
-          ui.activeTagFilters.add('all');
-        } else {
-          ui.activeTagFilters.delete('all');
-          if (ui.activeTagFilters.has(filterValue)) ui.activeTagFilters.delete(filterValue);
-          else ui.activeTagFilters.add(filterValue);
-          if (ui.activeTagFilters.size === 0) ui.activeTagFilters.add('all');
-        }
-        render();
+        toggleTagFilter(e.target.dataset.tag);
       }
     });
   };
@@ -1920,7 +2028,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
       sidebar.classList.add("collapsed");
       // Set initial icon state
       const toggleIcon = sidebarToggle.querySelector("i");
-      toggleIcon.className = "fas fa-chevron-right";
+      toggleIcon.className = "ph ph-caret-right";
     }
 
     collectTags();

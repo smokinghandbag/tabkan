@@ -16,6 +16,28 @@ export const invalidateBookmarkCache = () => {
     bookmarksDirty = true;
   };
 
+  // Count how many bookmarks match the current search term (for the result count
+  // in the filter status bar). Walks the cached tree if present, else 0.
+export const countBookmarkMatches = () => {
+    if (!ui.searchTerm) return 0;
+    const tree = cachedBookmarkTree;
+    if (!tree) return 0;
+    const term = ui.searchTerm.toLowerCase();
+    let count = 0;
+    const walk = (nodes) => {
+      for (const n of nodes || []) {
+        if (n.url) {
+          if ((n.title && n.title.toLowerCase().includes(term)) ||
+              (n.url && n.url.toLowerCase().includes(term))) count++;
+        } else if (n.children) {
+          walk(n.children);
+        }
+      }
+    };
+    walk(tree);
+    return count;
+  };
+
   // Render Bookmarks Card (Sleeping tabs)
 export const renderBookmarks = async () => {
     try {
@@ -139,14 +161,17 @@ export const renderBookmarks = async () => {
         return hasMatches;
       };
 
-      // Determine if folder should be expanded (when searching)
-      const shouldExpandFolder = (folder) => {
-        if (!ui.searchTerm) {
-          // No search - use saved state or original collapsed state
-          return !state.collapsedCards[folder.id];
+      // Determine if folder should be expanded.
+      const shouldExpandFolder = (folder, depth = 0) => {
+        if (ui.searchTerm) {
+          // When searching, expand any folder that (or whose child) matches.
+          return folderHasMatches(folder);
         }
-        // When searching, expand if folder or any child matches
-        return folderHasMatches(folder);
+        const saved = state.collapsedCards[folder.id];
+        if (saved !== undefined) return !saved; // honour the user's explicit choice
+        // Default with no saved state: top-level folders start collapsed for a
+        // tidier sidebar; nested folders start expanded.
+        return depth > 0;
       };
 
       // Recursive function to render folder hierarchy
@@ -158,7 +183,7 @@ export const renderBookmarks = async () => {
           if (!folderHasMatches(folder)) return '';
 
           // Determine if folder should be expanded
-          const isExpanded = shouldExpandFolder(folder);
+          const isExpanded = shouldExpandFolder(folder, depth);
 
           const hasChildren = folder.children && folder.children.length > 0;
 
@@ -184,7 +209,7 @@ export const renderBookmarks = async () => {
           return `
             <div class="bookmark-folder ${isExpanded ? '' : 'collapsed'}" data-folder-id="${escapeHtml(folder.id)}" data-depth="${depth}">
               <div class="bookmark-folder-header" style="padding-left: ${depth * FOLDER_INDENT_REM + FOLDER_HEADER_BASE_REM}rem;">
-                <i class="fas fa-chevron-${isExpanded ? 'down' : 'right'} folder-toggle"></i>
+                <i class="ph ph-caret-${isExpanded ? 'down' : 'right'} folder-toggle"></i>
                 <span class="folder-title">${escapeHtml(folder.title)}</span>
                 <span class="folder-count">${folder.totalBookmarks}</span>
               </div>
@@ -210,11 +235,11 @@ export const renderBookmarks = async () => {
       bookmarksCardContainer.innerHTML = `
         <div class="bookmarks-sidebar-card ${isCardCollapsed ? 'collapsed' : ''}">
           <div class="bookmarks-card-header" data-card-id="bookmarks-card">
-            <i class="fas fa-chevron-${isCardCollapsed ? 'right' : 'down'} bookmarks-card-toggle"></i>
+            <i class="ph ph-caret-${isCardCollapsed ? 'right' : 'down'} bookmarks-card-toggle"></i>
             <span class="bookmarks-card-title">Bookmarks</span>
             <span class="bookmarks-card-count">${totalBookmarks}</span>
             <button class="bookmarks-manager-btn" title="Open Chrome Bookmarks Manager">
-              <i class="fas fa-bookmark"></i>
+              <i class="ph ph-bookmark-simple"></i>
             </button>
           </div>
           <div class="bookmarks-card-content">
@@ -232,7 +257,7 @@ export const renderBookmarks = async () => {
         card.classList.toggle('collapsed');
         const isCollapsed = card.classList.contains('collapsed');
         state.collapsedCards['bookmarks-card'] = isCollapsed;
-        cardToggle.className = `fas fa-chevron-${isCollapsed ? 'right' : 'down'} bookmarks-card-toggle`;
+        cardToggle.className = `ph ph-caret-${isCollapsed ? 'right' : 'down'} bookmarks-card-toggle`;
         saveData(false);
       });
 
@@ -243,63 +268,25 @@ export const renderBookmarks = async () => {
         await chrome.tabs.create({ url: 'chrome://bookmarks/' });
       });
 
-      // Add event listeners for folder toggle (read-only view)
+      // Add event listeners for folder toggle (read-only view). The whole
+      // header row toggles the folder (not just the chevron).
       bookmarksCardContainer.querySelectorAll('.bookmark-folder-header').forEach(header => {
         const folder = header.parentElement;
         const folderId = folder.dataset.folderId;
 
         const folderToggle = header.querySelector('.folder-toggle');
-        folderToggle.addEventListener('click', (e) => {
+        header.addEventListener('click', (e) => {
           e.stopPropagation();
 
+          // Folders render nested inside their parent's .bookmark-folder-content,
+          // so collapsing is purely a class toggle — the CSS rule
+          // `.bookmark-folder.collapsed .bookmark-folder-content { max-height: 0 }`
+          // hides this folder's entire subtree at once. (Previously a fragile
+          // sibling-walk manually toggled a .hidden class on every descendant.)
           folder.classList.toggle('collapsed');
           const isCollapsed = folder.classList.contains('collapsed');
           state.collapsedCards[folderId] = isCollapsed;
-          folderToggle.className = `fas fa-chevron-${isCollapsed ? 'right' : 'down'} folder-toggle`;
-
-          // Helper function to recursively hide/show nested folders
-          const updateChildVisibility = (parentFolder, shouldHide) => {
-            const parentDepth = parseInt(parentFolder.dataset.depth);
-            let nextSibling = parentFolder.nextElementSibling;
-
-            while (nextSibling && nextSibling.classList.contains('bookmark-folder')) {
-              const siblingDepth = parseInt(nextSibling.dataset.depth);
-
-              // Stop if we've moved past this folder's descendants
-              if (siblingDepth <= parentDepth) break;
-
-              // This is a descendant of the parent folder
-              if (shouldHide) {
-                // Collapsing: hide all descendants
-                nextSibling.classList.add('hidden');
-              } else {
-                // Expanding: only show immediate children, check their collapsed state
-                if (siblingDepth === parentDepth + 1) {
-                  nextSibling.classList.remove('hidden');
-
-                  // If this child is collapsed, ensure ITS children stay hidden
-                  if (nextSibling.classList.contains('collapsed')) {
-                    // Skip over this child's descendants without showing them
-                    let grandchild = nextSibling.nextElementSibling;
-                    while (grandchild && grandchild.classList.contains('bookmark-folder')) {
-                      const grandchildDepth = parseInt(grandchild.dataset.depth);
-                      if (grandchildDepth <= siblingDepth) break;
-                      // Ensure grandchildren remain hidden
-                      grandchild.classList.add('hidden');
-                      grandchild = grandchild.nextElementSibling;
-                    }
-                  }
-                }
-                // Deeper descendants remain hidden (or will be handled by their parent)
-              }
-
-              nextSibling = nextSibling.nextElementSibling;
-            }
-          };
-
-          // Apply the visibility changes
-          updateChildVisibility(folder, isCollapsed);
-
+          folderToggle.className = `ph ph-caret-${isCollapsed ? 'right' : 'down'} folder-toggle`;
           saveData(false);
         });
 
@@ -339,7 +326,7 @@ export const renderBookmarks = async () => {
       bookmarksCardContainer.innerHTML = `
         <div class="bookmarks-sidebar-card">
           <div class="bookmarks-card-header">
-            <i class="fas fa-chevron-down bookmarks-card-toggle"></i>
+            <i class="ph ph-caret-down bookmarks-card-toggle"></i>
             <span class="bookmarks-card-title">Sleeping</span>
             <span class="bookmarks-card-count">0</span>
           </div>

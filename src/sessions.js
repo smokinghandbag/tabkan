@@ -370,7 +370,7 @@ export const renderSessions = async () => {
     if (sessions.length === 0) {
       sessionsDialog.list.innerHTML = `
         <div class="empty-sessions">
-          <i class="fas fa-save"></i>
+          <i class="ph ph-floppy-disk"></i>
           <p>No saved sessions yet</p>
           <p style="font-size: 0.875rem;">Save your current workspace to quickly restore it later</p>
         </div>
@@ -388,25 +388,25 @@ export const renderSessions = async () => {
           <div>
             <div class="session-card-title">${escapeHtml(session.name)}</div>
             <div class="session-card-meta">
-              <span><i class="fas fa-calendar"></i> ${formatDate(date)}</span>
-              <span><i class="fas fa-clock"></i> Used ${formatDate(lastUsed)}</span>
+              <span><i class="ph ph-calendar-blank"></i> ${formatDate(date)}</span>
+              <span><i class="ph ph-clock"></i> Used ${formatDate(lastUsed)}</span>
             </div>
             ${session.description ? `<div class="session-card-description">${escapeHtml(session.description)}</div>` : ''}
             <div class="session-card-stats">
-              <span class="session-card-stat"><i class="fas fa-folder"></i> ${session.stats.groups} groups</span>
-              <span class="session-card-stat"><i class="fas fa-window-maximize"></i> ${session.stats.tabs} tabs</span>
-              ${session.stats.bookmarks > 0 ? `<span class="session-card-stat"><i class="fas fa-bookmark"></i> ${session.stats.bookmarks} bookmarks</span>` : ''}
+              <span class="session-card-stat"><i class="ph ph-folder"></i> ${session.stats.groups} groups</span>
+              <span class="session-card-stat"><i class="ph ph-browser"></i> ${session.stats.tabs} tabs</span>
+              ${session.stats.bookmarks > 0 ? `<span class="session-card-stat"><i class="ph ph-bookmark-simple"></i> ${session.stats.bookmarks} bookmarks</span>` : ''}
             </div>
           </div>
           <div class="session-card-actions">
             <button class="btn btn-primary session-load-btn" data-session-id="${session.id}">
-              <i class="fas fa-play"></i> Load
+              <i class="ph ph-play"></i> Load
             </button>
             <button class="btn btn-secondary session-export-btn" data-session-id="${session.id}">
-              <i class="fas fa-download"></i> Export
+              <i class="ph ph-download-simple"></i> Export
             </button>
             <button class="btn btn-destructive session-delete-btn" data-session-id="${session.id}">
-              <i class="fas fa-trash"></i> Delete
+              <i class="ph ph-trash"></i> Delete
             </button>
           </div>
         </div>

@@ -21,6 +21,7 @@ zip -r -q "$OUT" \
   styles.css sidebar-styles.css \
   src \
   icons \
+  vendor \
   -x '*/.DS_Store' '*.DS_Store'
 
 echo "Created $OUT"

@@ -32,7 +32,8 @@ const chrome = {
     getCurrent: async () => ({ id: 99, url: 'chrome-extension://smoke/fullpage.html', windowId: 1, index: 0 }),
     query: async () => tabsData.map(t => ({ ...t })),
     get: async (id) => ({ ...(tabsData.find(t => t.id === id) || tabsData[0]) }),
-    update: async () => {}, move: async () => {}, remove: async () => {},
+    update: async (id, props) => { tabsData._updates = tabsData._updates || []; tabsData._updates.push({ id, props }); },
+    move: async () => {}, remove: async () => {},
     group: async () => 1, ungroup: async () => {}, create: async () => ({ id: 500, index: 9 }),
     onCreated: listener(), onRemoved: listener(), onUpdated: listener(),
     onMoved: listener(), onActivated: listener(),
@@ -115,8 +116,10 @@ try {
   const search = doc.getElementById('search-input');
   if (search) { search.value = 'example'; fire(search, 'input'); }
   await new Promise(r => setTimeout(r, 400)); // debounced render
-  fire(doc.getElementById('sessions-btn'), 'click');     // sessions.js renderSessions
-  fire(doc.getElementById('tag-manager-btn'), 'click');  // tag manager
+  // Sessions now opens from inside Settings (Block 3).
+  fire(doc.getElementById('settings-btn'), 'click');       // open settings dialog
+  fire(doc.getElementById('open-sessions-btn'), 'click');  // → sessions.js renderSessions
+  fire(doc.getElementById('tag-manager-btn'), 'click');    // tag manager (now inline w/ filters)
   fire(doc.getElementById('toggle-all-cards-btn'), 'click');
   await new Promise(r => setTimeout(r, 200));
 } catch (err) {
@@ -146,6 +149,122 @@ if (cards.length === 0 || sidebarCard.length === 0) {
   console.error('FAIL: render did not populate expected containers');
   process.exit(1);
 }
+
+// --- Block 1: tile click-zone behaviour ---------------------------------
+// Clear the search filter from earlier so tiles are visible again.
+try {
+  const search = doc.getElementById('search-input');
+  if (search) { search.value = ''; fire(search, 'input'); }
+  await new Promise(r => setTimeout(r, 400));
+
+  const clickAt = (el) => el && el.dispatchEvent(new window.MouseEvent('click', { bubbles: true, clientX: 0, clientY: 0 }));
+
+  // (a) Clicking the tile body should open/switch to the tab (chrome.tabs.update active:true).
+  tabsData._updates = [];
+  const firstTile = doc.querySelector('#cards-container .tab-item');
+  if (!firstTile) { console.error('FAIL: no tab-item rendered to click'); process.exit(1); }
+  // pointerdown/up with no movement → a real click, not a drag
+  firstTile.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, clientX: 5, clientY: 5 }));
+  firstTile.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true, clientX: 5, clientY: 5 }));
+  clickAt(firstTile.querySelector('.title') || firstTile);
+  await new Promise(r => setTimeout(r, 50));
+  const openedTab = (tabsData._updates || []).some(u => u.props && u.props.active === true);
+  console.log(`tile body opens tab: ${openedTab}`);
+  if (!openedTab) { console.error('FAIL: clicking tile body did not activate the tab'); process.exit(1); }
+
+  // (b) A drag gesture (pointer moved > threshold) must NOT open the tab.
+  tabsData._updates = [];
+  firstTile.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, clientX: 5, clientY: 5 }));
+  firstTile.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true, clientX: 40, clientY: 5 }));
+  clickAt(firstTile.querySelector('.title') || firstTile);
+  await new Promise(r => setTimeout(r, 50));
+  const openedAfterDrag = (tabsData._updates || []).some(u => u.props && u.props.active === true);
+  console.log(`drag gesture suppressed click: ${!openedAfterDrag}`);
+  if (openedAfterDrag) { console.error('FAIL: drag gesture wrongly opened the tab'); process.exit(1); }
+} catch (err) {
+  console.error('TILE INTERACTION ERROR:\n', err);
+  process.exit(1);
+}
+if (errors.length) {
+  console.error(`RUNTIME ERRORS after tile interaction (${errors.length}):`);
+  for (const e of errors.slice(0, 8)) console.error(' -', e && e.stack ? e.stack.split('\n').slice(0,4).join('\n') : e);
+  process.exit(1);
+}
+
+// --- Block 2: search/filter status + empty state ------------------------
+try {
+  const search = doc.getElementById('search-input');
+  const clearBtn = doc.getElementById('search-clear');
+  const status = doc.getElementById('filter-status');
+  const count = doc.getElementById('result-count');
+
+  // (a) A matching search reveals the clear button, status bar, and a count.
+  search.value = 'example'; fire(search, 'input');
+  await new Promise(r => setTimeout(r, 450));
+  const clearShown = clearBtn && !clearBtn.classList.contains('hidden');
+  const statusShown = status && !status.classList.contains('hidden');
+  console.log(`search shows clear+status: ${clearShown && statusShown}`);
+  console.log(`result count text: "${count && count.textContent}"`);
+  if (!clearShown || !statusShown) { console.error('FAIL: search did not reveal clear button / status bar'); process.exit(1); }
+  if (!/\btab(s)?\b/.test(count.textContent || '')) { console.error('FAIL: result count missing'); process.exit(1); }
+
+  // (b) A no-match search shows the empty state.
+  search.value = 'zzz-no-such-tab-xyz'; fire(search, 'input');
+  await new Promise(r => setTimeout(r, 450));
+  const emptyState = doc.querySelector('#cards-container .board-empty-state');
+  console.log(`empty state on no match: ${!!emptyState}`);
+  if (!emptyState) { console.error('FAIL: no empty state shown for a zero-match search'); process.exit(1); }
+
+  // (c) Clearing search hides the status bar and restores the board.
+  clearBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 450));
+  const statusHidden = status.classList.contains('hidden');
+  const boardBack = !!doc.querySelector('#cards-container .card');
+  console.log(`clear restores board: ${statusHidden && boardBack}`);
+  if (!statusHidden || !boardBack) { console.error('FAIL: clearing search did not restore the board'); process.exit(1); }
+} catch (err) {
+  console.error('SEARCH/FILTER ERROR:\n', err);
+  process.exit(1);
+}
+if (errors.length) {
+  console.error(`RUNTIME ERRORS after search/filter (${errors.length}):`);
+  for (const e of errors.slice(0, 8)) console.error(' -', e && e.stack ? e.stack.split('\n').slice(0,4).join('\n') : e);
+  process.exit(1);
+}
+
+// --- Block 4: bookmarks default to top-folders-collapsed ----------------
+{
+  // The smoke fixture has a top-level "Bookmarks Bar" containing "Folder <x>".
+  // With no saved state, a top-level folder should render collapsed by default.
+  const topFolder = doc.querySelector('#bookmarks-card-container .bookmark-folder');
+  const defaultCollapsed = topFolder && topFolder.classList.contains('collapsed');
+  console.log(`bookmarks top folder default-collapsed: ${!!defaultCollapsed}`);
+  if (!defaultCollapsed) { console.error('FAIL: top-level bookmark folder should default to collapsed'); process.exit(1); }
+
+  // Toggling the folder caret should expand it (simple class toggle, no .hidden walk).
+  const toggle = topFolder.querySelector('.folder-toggle');
+  toggle.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  const nowExpanded = !topFolder.classList.contains('collapsed');
+  console.log(`bookmark folder toggles open: ${nowExpanded}`);
+  if (!nowExpanded) { console.error('FAIL: folder toggle did not expand'); process.exit(1); }
+}
+
+// --- Block 3/refresh: combined toolbar row ------------------------------
+{
+  const removedSessionsBtn = doc.getElementById('sessions-btn');           // should be gone
+  const sessionsInSettings = doc.getElementById('open-sessions-btn');      // should exist
+  // Search, the three action buttons, and the tag filters now share one row.
+  const actions = doc.querySelector('.top-filters .toolbar-actions');
+  const tagBtnInActions = doc.querySelector('.toolbar-actions #tag-manager-btn');
+  const tagsInRow = doc.querySelector('.top-filters #tag-filters');
+  const searchInRow = doc.querySelector('.top-filters .search-wrapper');
+  console.log(`toolbar: sessions moved into settings: ${!removedSessionsBtn && !!sessionsInSettings}`);
+  console.log(`toolbar: combined row (search+actions+tags): ${!!(searchInRow && actions && tagBtnInActions && tagsInRow)}`);
+  if (removedSessionsBtn || !sessionsInSettings || !actions || !tagBtnInActions || !tagsInRow || !searchInRow) {
+    console.error('FAIL: combined toolbar layout not as expected'); process.exit(1);
+  }
+}
+
 console.log('SMOKE PASS ✅');
 // The loaded app sets a setInterval (extension-context check) + other timers that
 // keep Node's event loop alive, so exit explicitly on success.
