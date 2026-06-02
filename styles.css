@@ -93,6 +93,14 @@ body.fullpage-body {
   flex-shrink: 0;
 }
 
+/* The toggle chevron is a minimal glyph next to the 50px logo, so at the base
+   icon size it reads thinner than the other icons — bump it for matching heft.
+   Applies to both the expanded (collapse) and collapsed (expand) buttons. */
+.sidebar-collapse-btn .ph,
+.sidebar-expand-btn .ph {
+  font-size: 1.4em;
+}
+
 .sidebar-scroll-wrapper {
   flex: 1;
   overflow-y: auto;
@@ -562,6 +570,13 @@ body.fullpage-body {
 }
 
 .sidebar-expand-btn {
+  /* Match the expanded header height (driven by the 50px logo) and centre the
+     chevron, so it sits the same distance from the top whether the sidebar is
+     expanded or collapsed instead of jumping up when collapsed. */
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-bottom: 0.5rem;
 }
 

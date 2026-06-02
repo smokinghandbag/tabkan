@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Smoother board updates: tab and tab-group changes are now debounced
   consistently, so a burst of changes (e.g. an auto-collapse cascade) coalesces
   into a single re-render instead of a flicker storm.
+- Sidebar collapse/expand toggle: the chevron now renders at the same heavier
+  weight as the other icons and stays the same distance from the top whether the
+  sidebar is expanded or collapsed (it no longer jumps up when collapsed).
 
 ## [5.0] — 2026-06-02
 
