@@ -161,14 +161,17 @@ export const renderBookmarks = async () => {
         return hasMatches;
       };
 
-      // Determine if folder should be expanded (when searching)
-      const shouldExpandFolder = (folder) => {
-        if (!ui.searchTerm) {
-          // No search - use saved state or original collapsed state
-          return !state.collapsedCards[folder.id];
+      // Determine if folder should be expanded.
+      const shouldExpandFolder = (folder, depth = 0) => {
+        if (ui.searchTerm) {
+          // When searching, expand any folder that (or whose child) matches.
+          return folderHasMatches(folder);
         }
-        // When searching, expand if folder or any child matches
-        return folderHasMatches(folder);
+        const saved = state.collapsedCards[folder.id];
+        if (saved !== undefined) return !saved; // honour the user's explicit choice
+        // Default with no saved state: top-level folders start collapsed for a
+        // tidier sidebar; nested folders start expanded.
+        return depth > 0;
       };
 
       // Recursive function to render folder hierarchy
@@ -180,7 +183,7 @@ export const renderBookmarks = async () => {
           if (!folderHasMatches(folder)) return '';
 
           // Determine if folder should be expanded
-          const isExpanded = shouldExpandFolder(folder);
+          const isExpanded = shouldExpandFolder(folder, depth);
 
           const hasChildren = folder.children && folder.children.length > 0;
 
@@ -274,54 +277,15 @@ export const renderBookmarks = async () => {
         folderToggle.addEventListener('click', (e) => {
           e.stopPropagation();
 
+          // Folders render nested inside their parent's .bookmark-folder-content,
+          // so collapsing is purely a class toggle — the CSS rule
+          // `.bookmark-folder.collapsed .bookmark-folder-content { max-height: 0 }`
+          // hides this folder's entire subtree at once. (Previously a fragile
+          // sibling-walk manually toggled a .hidden class on every descendant.)
           folder.classList.toggle('collapsed');
           const isCollapsed = folder.classList.contains('collapsed');
           state.collapsedCards[folderId] = isCollapsed;
           folderToggle.className = `ph ph-caret-${isCollapsed ? 'right' : 'down'} folder-toggle`;
-
-          // Helper function to recursively hide/show nested folders
-          const updateChildVisibility = (parentFolder, shouldHide) => {
-            const parentDepth = parseInt(parentFolder.dataset.depth);
-            let nextSibling = parentFolder.nextElementSibling;
-
-            while (nextSibling && nextSibling.classList.contains('bookmark-folder')) {
-              const siblingDepth = parseInt(nextSibling.dataset.depth);
-
-              // Stop if we've moved past this folder's descendants
-              if (siblingDepth <= parentDepth) break;
-
-              // This is a descendant of the parent folder
-              if (shouldHide) {
-                // Collapsing: hide all descendants
-                nextSibling.classList.add('hidden');
-              } else {
-                // Expanding: only show immediate children, check their collapsed state
-                if (siblingDepth === parentDepth + 1) {
-                  nextSibling.classList.remove('hidden');
-
-                  // If this child is collapsed, ensure ITS children stay hidden
-                  if (nextSibling.classList.contains('collapsed')) {
-                    // Skip over this child's descendants without showing them
-                    let grandchild = nextSibling.nextElementSibling;
-                    while (grandchild && grandchild.classList.contains('bookmark-folder')) {
-                      const grandchildDepth = parseInt(grandchild.dataset.depth);
-                      if (grandchildDepth <= siblingDepth) break;
-                      // Ensure grandchildren remain hidden
-                      grandchild.classList.add('hidden');
-                      grandchild = grandchild.nextElementSibling;
-                    }
-                  }
-                }
-                // Deeper descendants remain hidden (or will be handled by their parent)
-              }
-
-              nextSibling = nextSibling.nextElementSibling;
-            }
-          };
-
-          // Apply the visibility changes
-          updateChildVisibility(folder, isCollapsed);
-
           saveData(false);
         });
 

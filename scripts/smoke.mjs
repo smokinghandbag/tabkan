@@ -232,6 +232,23 @@ if (errors.length) {
   process.exit(1);
 }
 
+// --- Block 4: bookmarks default to top-folders-collapsed ----------------
+{
+  // The smoke fixture has a top-level "Bookmarks Bar" containing "Folder <x>".
+  // With no saved state, a top-level folder should render collapsed by default.
+  const topFolder = doc.querySelector('#bookmarks-card-container .bookmark-folder');
+  const defaultCollapsed = topFolder && topFolder.classList.contains('collapsed');
+  console.log(`bookmarks top folder default-collapsed: ${!!defaultCollapsed}`);
+  if (!defaultCollapsed) { console.error('FAIL: top-level bookmark folder should default to collapsed'); process.exit(1); }
+
+  // Toggling the folder caret should expand it (simple class toggle, no .hidden walk).
+  const toggle = topFolder.querySelector('.folder-toggle');
+  toggle.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  const nowExpanded = !topFolder.classList.contains('collapsed');
+  console.log(`bookmark folder toggles open: ${nowExpanded}`);
+  if (!nowExpanded) { console.error('FAIL: folder toggle did not expand'); process.exit(1); }
+}
+
 // --- Block 3: toolbar layout (sessions moved into settings) -------------
 {
   const removedSessionsBtn = doc.getElementById('sessions-btn');           // should be gone

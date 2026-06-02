@@ -373,14 +373,6 @@ body.fullpage-body {
   overflow: visible;
 }
 
-.bookmark-folder.hidden {
-  max-height: 0;
-  opacity: 0;
-  margin: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
 .bookmark-folder.dragging {
   opacity: 0.5;
 }
