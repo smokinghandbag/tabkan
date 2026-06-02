@@ -1280,9 +1280,8 @@ li:hover .link-actions,
 }
 
 .tab-item-sleeping::before {
-  content: '\f186'; /* Font Awesome moon icon */
-  font-family: 'Font Awesome 5 Free';
-  font-weight: 900;
+  content: '\e330'; /* Phosphor moon */
+  font-family: 'Phosphor-Bold';
   position: absolute;
   right: 0.75rem;
   top: 50%;
@@ -1439,6 +1438,12 @@ li {
 .tab-item .action-button { cursor: pointer; }
 /* Copy-URL confirmation flash. */
 .tab-item .tab-copy.copied { color: var(--success, #1E8E3E); }
+/* Tile action icons: muted at rest, but brighten so the bold strokes register;
+   bump size a touch since copy/dots are among Phosphor's finer glyphs. */
+.tab-item .link-actions .action-button { color: var(--muted-foreground); }
+.tab-item .link-actions .action-button .ph { font-size: 1.18em; }
+.tab-item:hover .link-actions .action-button { color: var(--card-foreground); }
+.tab-item .link-actions .action-button:hover { color: var(--primary); }
 
 .link-content {
   flex: 1;
@@ -2301,8 +2306,8 @@ body.dnd-active .card ul > li:hover { transform: none; box-shadow: none; } /* ke
 /* --- Search: rounded pill with leading magnifier --------------------------- */
 .search-wrapper { position: relative; }
 .search-wrapper::before {
-  content: "\f002"; /* fa-magnifying-glass */
-  font-family: "Font Awesome 6 Free"; font-weight: 900;
+  content: "\e30c"; /* Phosphor magnifying-glass */
+  font-family: "Phosphor-Bold";
   position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%);
   color: var(--muted-foreground); font-size: 0.85rem; pointer-events: none;
 }
