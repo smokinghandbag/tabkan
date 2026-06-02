@@ -2486,8 +2486,6 @@ body.fullpage-body button {
   color: var(--primary);
 }
 
-/* Breathing room on the right of the search field (match the left toolbar gap). */
-.search-wrapper { margin-right: -0.5rem; }
 
 /* Hide the dashboard sidebar scrollbar too (scroll still works). */
 .sidebar-scroll-wrapper,
