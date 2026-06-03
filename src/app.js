@@ -76,6 +76,15 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     }, 500);
   };
 
+  // Apply the colour theme: set/remove data-theme on <html> and mirror the
+  // choice to localStorage so theme-init.js can apply it pre-paint next load.
+  const applyTheme = (theme) => {
+    const t = theme === 'light' ? 'light' : 'dark';
+    if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.removeAttribute('data-theme');
+    try { localStorage.setItem('tabkan-theme', t); } catch { /* ignore */ }
+  };
+
   // Show task warning dialog
   const showTaskWarningDialog = (tabUrl, tabTitle, onComplete, onCloseAnyway) => {
     const unfinishedTasks = getUnfinishedTasks(tabUrl);
@@ -1542,6 +1551,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
   settingsBtn.addEventListener("click", () => {
     // Load current settings into UI
     settingsDialog.autoCollapseCheckbox.checked = state.settings.autoCollapseGroups || false;
+    syncThemeToggle();
     showDialog(settingsDialog);
   });
 
@@ -1552,6 +1562,23 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     // tabGroups.onUpdated, so persisting is sufficient — no message needed
     // (the old runtime.sendMessage had no handler and was silently dropped).
     saveData(false);
+  });
+
+  // --- Theme toggle (Appearance) ---
+  const themeOptButtons = Array.from(document.querySelectorAll('#theme-toggle .theme-opt'));
+  const syncThemeToggle = () => {
+    const current = state.settings.theme === 'light' ? 'light' : 'dark';
+    themeOptButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.themeChoice === current));
+  };
+  themeOptButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const choice = btn.dataset.themeChoice === 'light' ? 'light' : 'dark';
+      if (state.settings.theme === choice) return;
+      state.settings.theme = choice;
+      applyTheme(choice);
+      syncThemeToggle();
+      saveData(false);
+    });
   });
 
   // --- Sessions Dialog Handlers ---
@@ -2084,11 +2111,15 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     state.collapsedCards = data.collapsedCards || {};
 
     // Migrate settings for existing users (add default settings if not present)
-    state.settings = data.settings || { autoCollapseGroups: false };
+    state.settings = data.settings || { autoCollapseGroups: false, theme: 'dark' };
+    if (!state.settings.theme) state.settings.theme = 'dark'; // pre-theme users default to dark
     if (!data.settings) {
       // First time with settings, save defaults
       await chrome.storage.sync.set({ settings: state.settings });
     }
+    // Apply the saved theme (keeps storage.sync the source of truth + refreshes
+    // the localStorage mirror that theme-init.js reads pre-paint).
+    applyTheme(state.settings.theme);
 
     // Load bookmark folder ID from local storage
     const localData = await chrome.storage.local.get(["bookmarkFolderId"]);

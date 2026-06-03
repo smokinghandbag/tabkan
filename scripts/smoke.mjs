@@ -341,6 +341,31 @@ if (errors.length) {
   process.exit(1);
 }
 
+// --- Theme toggle (light/dark) ------------------------------------------
+try {
+  const html = doc.documentElement;
+  const lightBtn = doc.querySelector('#theme-toggle .theme-opt[data-theme-choice="light"]');
+  const darkBtn = doc.querySelector('#theme-toggle .theme-opt[data-theme-choice="dark"]');
+  if (!lightBtn || !darkBtn) { console.error('FAIL: theme toggle buttons missing'); process.exit(1); }
+
+  chrome.storage.sync._writes = [];
+  lightBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 650)); // saveData debounce
+  const wentLight = html.getAttribute('data-theme') === 'light';
+  const persistedLight = chrome.storage.sync._writes.some(w => w.settings && w.settings.theme === 'light');
+  console.log(`theme → light applies + persists: ${wentLight && persistedLight}`);
+  if (!wentLight || !persistedLight) { console.error('FAIL: light theme not applied/persisted'); process.exit(1); }
+
+  darkBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 50));
+  const backDark = html.getAttribute('data-theme') !== 'light';
+  console.log(`theme → dark restores: ${backDark}`);
+  if (!backDark) { console.error('FAIL: dark theme not restored'); process.exit(1); }
+} catch (err) {
+  console.error('THEME TOGGLE ERROR:\n', err);
+  process.exit(1);
+}
+
 // --- Block 3/refresh: combined toolbar row ------------------------------
 {
   const removedSessionsBtn = doc.getElementById('sessions-btn');           // should be gone

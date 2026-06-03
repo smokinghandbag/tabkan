@@ -7,6 +7,16 @@
   // Constants
   const SIDEBAR_WIDTH = '220px';
 
+  // Apply the colour theme (mirrors the dashboard's settings.theme). theme-init.js
+  // sets it pre-paint from the localStorage mirror; this refreshes from synced
+  // settings on load and reacts to live changes via storage.onChanged.
+  const applyTheme = (theme) => {
+    const t = theme === 'light' ? 'light' : 'dark';
+    if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.removeAttribute('data-theme');
+    try { localStorage.setItem('tabkan-theme', t); } catch (e) { /* ignore */ }
+  };
+
   // Chrome tab group color mapping (official Chromium colors)
   const CHROME_GROUP_COLORS = {
     'grey': '#5F6368',
@@ -50,6 +60,12 @@
 
   // Initialize sidebar
   const initSidebar = async () => {
+    // Apply saved theme from synced settings (refreshes the pre-paint guess).
+    try {
+      const { settings } = await chrome.storage.sync.get('settings');
+      applyTheme(settings && settings.theme);
+    } catch (e) { /* ignore */ }
+
     // Get current window
     const currentWindow = await chrome.windows.getCurrent();
     currentWindowId = currentWindow.id;
@@ -204,9 +220,10 @@
     const groupColor = CHROME_GROUP_COLORS[group.color] || '#5F6368';
     header.style.borderLeftColor = groupColor;
 
-    // Add a very subtle background tint of the group color (5% opacity)
+    // Flat, theme-aware group-colour tint (no gradient — mixes the group colour
+    // into the themed surface so it stays light in light mode).
     if (group.color) {
-      header.style.background = `linear-gradient(to right, ${groupColor}08, #1d2026 40%)`;
+      header.style.background = `color-mix(in srgb, ${groupColor} 7%, var(--sp-surface))`;
     }
 
     // Create icon element (using Unicode, no Font Awesome needed)
@@ -246,13 +263,13 @@
     groupDiv.appendChild(header);
     groupDiv.appendChild(content);
 
-    // Preserve gradient on hover
+    // Flat tint shift on hover (stays theme-aware).
     if (group.color) {
       header.addEventListener('mouseenter', () => {
-        header.style.background = `linear-gradient(to right, ${groupColor}12, #262a31 40%)`;
+        header.style.background = `color-mix(in srgb, ${groupColor} 13%, var(--sp-elevated))`;
       });
       header.addEventListener('mouseleave', () => {
-        header.style.background = `linear-gradient(to right, ${groupColor}08, #1d2026 40%)`;
+        header.style.background = `color-mix(in srgb, ${groupColor} 7%, var(--sp-surface))`;
       });
     }
 
@@ -550,10 +567,14 @@
     chrome.tabGroups.onRemoved.addListener(() => scheduleRender());
     chrome.tabGroups.onUpdated.addListener(() => scheduleRender());
 
-    // Listen for storage changes (sleeping tabs, etc.)
+    // Listen for storage changes (sleeping tabs, theme, etc.)
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName === 'sync' && changes.sleepingTabs) {
         scheduleRender();
+      }
+      // Live-apply a theme change made from the dashboard's settings.
+      if (areaName === 'sync' && changes.settings) {
+        applyTheme(changes.settings.newValue && changes.settings.newValue.theme);
       }
     });
   };

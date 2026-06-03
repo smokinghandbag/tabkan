@@ -12,7 +12,7 @@ export const state = {
   bookmarkFolderId: null,
   collapsedCards: {},
   sleepingTabs: [],
-  settings: { autoCollapseGroups: false },
+  settings: { autoCollapseGroups: false, theme: 'dark' },
 };
 
 // Only values that are read/written across module boundaries live here.

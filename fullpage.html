@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>TabKan</title>
+  <script src="theme-init.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap" rel="stylesheet">
@@ -175,6 +176,16 @@
   <div id="settings-dialog" class="dialog hidden">
     <h3 class="dialog-title"><i class="ph ph-gear"></i> Settings</h3>
     <div class="settings-section">
+      <div class="setting-item">
+        <div class="setting-info">
+          <label class="setting-label">Appearance</label>
+          <p class="setting-description">Switch between a dark and light interface.</p>
+        </div>
+        <div class="theme-toggle" id="theme-toggle" role="group" aria-label="Theme">
+          <button type="button" class="theme-opt" data-theme-choice="light"><i class="ph ph-sun"></i> Light</button>
+          <button type="button" class="theme-opt" data-theme-choice="dark"><i class="ph ph-moon"></i> Dark</button>
+        </div>
+      </div>
       <div class="setting-item">
         <div class="setting-info">
           <label class="setting-label">Auto-collapse other groups</label>

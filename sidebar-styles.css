@@ -1,5 +1,8 @@
 /* TabKan - Side Panel styles (themed to match the dashboard redesign). */
 
+/* Theme tokens — :root = dark (default); [data-theme="light"] overrides.
+   <html data-theme> is set pre-paint by theme-init.js and on the fly by
+   sidepanel.js (which mirrors the dashboard's settings.theme). */
 :root {
   --sp-bg: #14161a;          /* page */
   --sp-surface-2: #181b20;   /* search bar */
@@ -8,7 +11,26 @@
   --sp-border: #2a2e36;
   --sp-accent: #7c5cfc;      /* indigo/purple */
   --sp-text: #e8e9ed;
+  --sp-text-dim: #c5c9d1;    /* tab titles (slightly dimmer than headings) */
   --sp-muted: #8e95a3;
+  --sp-scrollbar: #353b45;
+  --sp-scrollbar-hover: #424956;
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --sp-bg: #f3f5f8;          /* light grey page */
+  --sp-surface-2: #ffffff;   /* search bar (white) */
+  --sp-surface: #ffffff;     /* group cards (white) */
+  --sp-elevated: #ebeef3;    /* hover / active (light grey) */
+  --sp-border: #e1e5ec;
+  --sp-accent: #6b4ef0;      /* indigo, darkened for contrast on white */
+  --sp-text: #1a1d24;        /* near-black */
+  --sp-text-dim: #39414e;    /* dim but dark */
+  --sp-muted: #697186;
+  --sp-scrollbar: #cdd2db;
+  --sp-scrollbar-hover: #b6bcc8;
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -90,8 +112,8 @@ body {
 
 .sidebar-content::-webkit-scrollbar { width: 8px; }
 .sidebar-content::-webkit-scrollbar-track { background: transparent; }
-.sidebar-content::-webkit-scrollbar-thumb { background: #353b45; border-radius: 999px; }
-.sidebar-content::-webkit-scrollbar-thumb:hover { background: #424956; }
+.sidebar-content::-webkit-scrollbar-thumb { background: var(--sp-scrollbar); border-radius: 999px; }
+.sidebar-content::-webkit-scrollbar-thumb:hover { background: var(--sp-scrollbar-hover); }
 
 /* --- Group cards ------------------------------------------------------------ */
 .sidebar-group {
@@ -190,7 +212,7 @@ body {
 .tab-title {
   flex: 1;
   font-size: 0.78rem;
-  color: #c5c9d1;
+  color: var(--sp-text-dim);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

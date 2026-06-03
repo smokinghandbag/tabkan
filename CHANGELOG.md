@@ -5,6 +5,21 @@ All notable changes to the **TabKan** extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.2] — 2026-06-03
+
+### Added
+- **Light mode.** A new Light / Dark toggle in Settings → Appearance. The choice
+  is remembered and synced, and applies across the dashboard, the side panel
+  (updating live), and the toolbar popup. Dark remains the default.
+
+### Changed
+- The "All Tasks" roll-up checkboxes now match the Edit dialog's to-dos (rounded
+  accent checkbox with a check, strikethrough on complete).
+
+### Fixed
+- Side panel group headers are now a flat, theme-aware tint of the group colour
+  instead of fading to a hardcoded dark — so they read correctly in light mode.
+
 ## [5.1] — 2026-06-03
 
 A redesign of the tab editor and tab cards, plus a leaner toolbar.
@@ -96,6 +111,7 @@ First public, open-source release.
 - Stored-XSS hardening across the dashboard and side panel (all untrusted data
   escaped before rendering); tightened Content Security Policy.
 
+[5.2]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.2
 [5.1]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.1
 [5.0.1]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.0.1
 [5.0]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.0
