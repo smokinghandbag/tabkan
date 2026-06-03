@@ -17,6 +17,7 @@ zip -r -q "$OUT" \
   background.js \
   popup.html popup.js \
   fullpage.html \
+  welcome.html \
   theme-init.js \
   sidepanel.html sidepanel.js \
   styles.css sidebar-styles.css \

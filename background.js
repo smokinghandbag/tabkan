@@ -16,13 +16,19 @@ const openOrCreateDashboard = async () => {
 
 // --- Event Listeners ---
 
-// When the extension is installed, create a context menu item.
-chrome.runtime.onInstalled.addListener(() => {
+// On install: create the context menu item, and (first install only) open a
+// one-time welcome tab that shows how to pin the toolbar icon. Chrome doesn't
+// let an extension pin itself, so this nudges the user to do it.
+chrome.runtime.onInstalled.addListener((details) => {
   chrome.contextMenus.create({
     id: "open-kanban-dashboard",
     title: "Open TabKan",
     contexts: ["page"] // Show on any page
   });
+
+  if (details.reason === "install") {
+    chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") });
+  }
 });
 
 // When the context menu item is clicked, open the dashboard.

@@ -5,6 +5,14 @@ All notable changes to the **TabKan** extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.2.1] — 2026-06-03
+
+### Added
+- **First-run welcome page.** On first install, TabKan opens a short welcome tab
+  that shows how to pin the toolbar icon (Chrome doesn't allow extensions to pin
+  themselves) and links straight to the dashboard. It only appears once, never on
+  updates, and follows your light/dark theme.
+
 ## [5.2] — 2026-06-03
 
 ### Added
@@ -111,6 +119,7 @@ First public, open-source release.
 - Stored-XSS hardening across the dashboard and side panel (all untrusted data
   escaped before rendering); tightened Content Security Policy.
 
+[5.2.1]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.2.1
 [5.2]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.2
 [5.1]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.1
 [5.0.1]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.0.1
