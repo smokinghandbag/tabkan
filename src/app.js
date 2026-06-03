@@ -8,6 +8,7 @@ import {
   SCROLL_ANIMATION_SPEED, EDGE_SCROLL_ZONE_PX,
   FOLDER_INDENT_REM, BOOKMARK_INDENT_REM, FOLDER_HEADER_BASE_REM, DRAG_HANDLE_OFFSET_PX,
   CHROME_GROUP_COLORS, movedLikeDrag,
+  normalizeTag, todoProgress, suggestTags, splitMatch,
 } from './utils.js';
 import { state, ui } from './state.js';
 import {
@@ -16,9 +17,9 @@ import {
   editNoteDialog, settingsDialog, sessionsDialog, saveSessionDialog, loadSessionDialog,
   tagManagerDialog, searchInput, sidebar, sidebarToggle, sidebarCollapseBtn,
   collapsedFavicons, tabBin, tabBinCollapsed, bookmarksCardContainer, taskRollupContainer,
-  searchClearBtn, filterStatus, resultCount, activeFilterChips, clearFiltersBtn,
+  searchClearBtn,
 } from './dom.js';
-import { renderBookmarksIfDirty, invalidateBookmarkCache, countBookmarkMatches } from './bookmarks.js';
+import { renderBookmarksIfDirty, invalidateBookmarkCache } from './bookmarks.js';
 import { hasUnfinishedTasks, getUnfinishedTasks, aggregateAllTasks, renderTaskRollup, renderCollapsedTaskRollup } from './tasks.js';
 import { renderSessions, saveSession, loadSession, importSession } from './sessions.js';
 
@@ -45,6 +46,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
   let renderTimeout = null; // Debounce timer for render
   let pendingRender = false; // Flag for queued render
   let editDialogAbortController = null; // AbortController for edit dialog cleanup
+  let editDialogClose = null; // commit-and-close fn for the open Edit Tab modal (auto-save)
   let saveDataTimeout = null; // Debounce timer for storage writes
   let bookmarkChangeTimeout = null; // Debounce timer for bookmark changes
 
@@ -285,11 +287,13 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     if (e.target === dialogOverlay) {
       // Find which dialog is currently open and close it
       if (!renameDialog.element.classList.contains("hidden")) {
-        hideDialog(renameDialog);
-        // Clean up event listeners using AbortController
-        if (editDialogAbortController) {
-          editDialogAbortController.abort();
-          editDialogAbortController = null;
+        // The Edit Tab modal auto-saves: route the overlay close through its
+        // commit-and-close fn instead of just hiding (which would drop edits).
+        if (editDialogClose) {
+          editDialogClose();
+        } else {
+          hideDialog(renameDialog);
+          if (editDialogAbortController) { editDialogAbortController.abort(); editDialogAbortController = null; }
         }
       } else if (!tagManagerDialog.element.classList.contains("hidden")) {
         hideDialog(tagManagerDialog);
@@ -304,15 +308,8 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     }
   });
 
-  const updateTagSuggestions = () => {
-    renameDialog.tagSuggestions.innerHTML = '';
-    Array.from(ui.availableTags).sort().forEach(tag => {
-      const option = document.createElement('option');
-      option.value = tag;
-      renameDialog.tagSuggestions.appendChild(option);
-    });
-  };
-
+  // Tag chips for the NOTE dialog (legacy style; the Edit Tab modal renders its
+  // own chips inline — see openEditDialog).
   const renderTagChips = (tags, container) => {
     container.innerHTML = '';
     tags.forEach(tag => {
@@ -323,96 +320,210 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     });
   };
 
+  // How many tabs (active + sleeping, keyed by URL metadata) carry this tag.
+  const countTagUsage = (tag) => {
+    const lc = tag.toLowerCase();
+    let n = 0;
+    Object.values(state.tabMetadata).forEach(m => {
+      if (m && Array.isArray(m.tags) && m.tags.some(t => t.toLowerCase() === lc)) n++;
+    });
+    return n;
+  };
+
+  // The Edit Tab modal. Auto-saves: every close path (✕, overlay, Esc) commits
+  // the current title/notes/tags/todos via `callback`. No Save button.
   export const openEditDialog = (tab, callback) => {
     const metadata = state.tabMetadata[tab.url] || {};
-    const currentTitle = metadata.title || tab.title;
-    const currentTags = metadata.tags || [];
-    const currentNotes = metadata.notes || "";
-    const currentTodos = metadata.todos || [];
+    let tags = [...(metadata.tags || [])];
+    let todos = (metadata.todos || []).map(t => ({ text: t.text, completed: !!t.completed }));
 
-    renameDialog.title.textContent = "Edit Tab";
-    renameDialog.input.value = currentTitle;
-    renameDialog.notesInput.value = currentNotes;
-    let tags = [...currentTags];
-    let todos = [...currentTodos];
-    renderTagChips(tags, renameDialog.tagChipsContainer);
-    renderTodoList(todos, renameDialog.todoListContainer);
-    updateTagSuggestions();
+    // Header identity
+    renameDialog.favicon.src = getFaviconUrl(tab.url);
+    let host = '';
+    try { host = new URL(tab.url).hostname.replace(/^www\./, ''); } catch { host = tab.url || ''; }
+    renameDialog.host.textContent = host;
+    renameDialog.host.title = tab.url || '';
 
-    // Abort previous dialog's listeners if any
-    if (editDialogAbortController) {
-      editDialogAbortController.abort();
-    }
+    renameDialog.input.value = metadata.title || tab.title || '';
+    renameDialog.notesInput.value = metadata.notes || '';
+    renameDialog.tagsInput.value = '';
+    renameDialog.tagSuggestions.classList.add('hidden');
+    renameDialog.tagSuggestions.innerHTML = '';
 
-    // Use AbortController for automatic cleanup
+    if (editDialogAbortController) editDialogAbortController.abort();
     editDialogAbortController = new AbortController();
     const signal = editDialogAbortController.signal;
 
-    const handleTodoChange = (e) => {
-      if (e.target.type === 'checkbox') {
-        const index = parseInt(e.target.id.split('-')[1]);
-        todos[index].completed = e.target.checked;
-        renderTodoList(todos, renameDialog.todoListContainer);
-      }
-      if (e.target.classList.contains('delete-todo')) {
-        const index = parseInt(e.target.dataset.index);
-        todos.splice(index, 1);
-        renderTodoList(todos, renameDialog.todoListContainer);
-      }
+    let ddActive = -1; // active autocomplete row index (-1 = none)
+
+    // --- renderers --------------------------------------------------------
+    const renderChips = () => {
+      renameDialog.tagBox.querySelectorAll('.etm-chip').forEach(c => c.remove());
+      tags.forEach(tag => {
+        const chip = document.createElement('span');
+        chip.className = 'etm-chip';
+        chip.innerHTML = `#${escapeHtml(tag)} <span class="etm-chip-x" data-tag="${escapeHtml(tag)}"><i class="ph ph-x"></i></span>`;
+        renameDialog.tagBox.insertBefore(chip, renameDialog.tagsInput);
+      });
     };
 
-    const handleAddTodo = (e) => {
+    const renderTodos = () => {
+      const c = renameDialog.todoListContainer;
+      c.innerHTML = '';
+      todos.forEach((todo, index) => {
+        const row = document.createElement('div');
+        row.className = `etm-todo ${todo.completed ? 'completed' : ''}`;
+        row.innerHTML = `
+          <span class="etm-todo-box" data-toggle="${index}">${todo.completed ? '<i class="ph ph-check"></i>' : ''}</span>
+          <span class="etm-todo-text">${escapeHtml(todo.text)}</span>
+          <button class="etm-todo-del" data-del="${index}" aria-label="Delete to-do"><i class="ph ph-trash"></i></button>`;
+        c.appendChild(row);
+      });
+      const { done, total } = todoProgress(todos);
+      renameDialog.todoCount.textContent = total ? `${done} / ${total}` : '';
+      c.parentElement.classList.toggle('scrollable', c.scrollHeight > c.clientHeight + 2);
+    };
+
+    // --- tag autocomplete -------------------------------------------------
+    const ddItems = () => Array.from(renameDialog.tagSuggestions.querySelectorAll('[data-add]'));
+    const closeDropdown = () => {
+      renameDialog.tagSuggestions.classList.add('hidden');
+      renameDialog.tagSuggestions.innerHTML = '';
+      ddActive = -1;
+    };
+    const setActive = (i) => {
+      const items = ddItems();
+      if (!items.length) { ddActive = -1; return; }
+      ddActive = (i + items.length) % items.length;
+      items.forEach((el, idx) => el.classList.toggle('active', idx === ddActive));
+    };
+    const addTag = (raw) => {
+      const tag = normalizeTag(raw);
+      if (tag && !tags.some(t => t.toLowerCase() === tag.toLowerCase())) {
+        tags.push(tag);
+        ui.availableTags.add(tag);
+        renderChips();
+      }
+      renameDialog.tagsInput.value = '';
+      closeDropdown();
+      renameDialog.tagsInput.focus();
+    };
+    const renderDropdown = () => {
+      const query = renameDialog.tagsInput.value;
+      const { matches, showCreate, createValue } = suggestTags(ui.availableTags, query, tags);
+      if (!matches.length && !showCreate) { closeDropdown(); return; }
+      let html = '';
+      if (matches.length) {
+        html += `<div class="etm-dd-head">Existing tags</div>`;
+        matches.forEach(name => {
+          const [b, m, a] = splitMatch(name, query);
+          const count = countTagUsage(name);
+          html += `<div class="etm-dd-row" data-add="${escapeHtml(name)}">` +
+            `<i class="ph ph-tag"></i>` +
+            `<span class="etm-dd-name">${escapeHtml(b)}<b>${escapeHtml(m)}</b>${escapeHtml(a)}</span>` +
+            `<span class="etm-dd-meta">${count} ${count === 1 ? 'tab' : 'tabs'}</span></div>`;
+        });
+      }
+      if (showCreate) {
+        html += `<div class="etm-dd-create" data-add="${escapeHtml(createValue)}">` +
+          `<i class="ph ph-plus"></i>` +
+          `<span class="etm-dd-label">Create <b>#${escapeHtml(createValue)}</b></span></div>`;
+      }
+      renameDialog.tagSuggestions.innerHTML = html;
+      renameDialog.tagSuggestions.classList.remove('hidden');
+      setActive(0);
+    };
+
+    // --- listeners --------------------------------------------------------
+    renameDialog.tagsInput.addEventListener('input', renderDropdown, { signal });
+    renameDialog.tagsInput.addEventListener('focus', () => renameDialog.tagBox.classList.add('focus'), { signal });
+    renameDialog.tagsInput.addEventListener('blur', () => {
+      renameDialog.tagBox.classList.remove('focus');
+      setTimeout(closeDropdown, 120); // allow a dropdown mousedown to land first
+    }, { signal });
+    renameDialog.tagsInput.addEventListener('keydown', (e) => {
+      const open = !renameDialog.tagSuggestions.classList.contains('hidden');
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        const active = open && ddActive >= 0 ? ddItems()[ddActive] : null;
+        addTag(active ? active.dataset.add : renameDialog.tagsInput.value);
+      } else if (e.key === 'ArrowDown' && open) {
+        e.preventDefault(); setActive(ddActive + 1);
+      } else if (e.key === 'ArrowUp' && open) {
+        e.preventDefault(); setActive(ddActive - 1);
+      } else if (e.key === 'Escape' && open) {
+        e.preventDefault(); e.stopPropagation(); closeDropdown();
+      } else if (e.key === 'Backspace' && renameDialog.tagsInput.value === '' && tags.length) {
+        tags.pop(); renderChips();
+      }
+    }, { signal });
+    // mousedown (not click) so the chip is added before the input's blur fires
+    renameDialog.tagSuggestions.addEventListener('mousedown', (e) => {
+      const row = e.target.closest('[data-add]');
+      if (row) { e.preventDefault(); addTag(row.dataset.add); }
+    }, { signal });
+
+    renameDialog.tagBox.addEventListener('click', (e) => {
+      const del = e.target.closest('.etm-chip-x');
+      if (del) {
+        const t = del.dataset.tag;
+        tags = tags.filter(x => x !== t);
+        renderChips();
+        return;
+      }
+      if (e.target === renameDialog.tagBox) renameDialog.tagsInput.focus();
+    }, { signal });
+
+    renameDialog.todoListContainer.addEventListener('click', (e) => {
+      const box = e.target.closest('[data-toggle]');
+      if (box) {
+        const i = parseInt(box.dataset.toggle, 10);
+        if (todos[i]) { todos[i].completed = !todos[i].completed; renderTodos(); }
+        return;
+      }
+      const del = e.target.closest('[data-del]');
+      if (del) {
+        const i = parseInt(del.dataset.del, 10);
+        todos.splice(i, 1); renderTodos();
+      }
+    }, { signal });
+
+    renameDialog.addTodoInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && renameDialog.addTodoInput.value.trim() !== '') {
         e.preventDefault();
         todos.push({ text: renameDialog.addTodoInput.value.trim(), completed: false });
         renameDialog.addTodoInput.value = '';
-        renderTodoList(todos, renameDialog.todoListContainer);
+        renderTodos();
+        renameDialog.todoListContainer.scrollTop = renameDialog.todoListContainer.scrollHeight;
       }
-    };
+    }, { signal });
 
-    renameDialog.todoListContainer.addEventListener('click', handleTodoChange, { signal });
-    renameDialog.addTodoInput.addEventListener('keydown', handleAddTodo, { signal });
-
-    const handleTagChipDelete = (e) => {
-      if (e.target.classList.contains('delete-tag')) {
-        const tagToDelete = e.target.dataset.tag;
-        tags = tags.filter(t => t !== tagToDelete);
-        renderTagChips(tags, renameDialog.tagChipsContainer);
-      }
-    };
-
-    const handleTagInput = (e) => {
-      if (e.key === 'Enter' && renameDialog.tagsInput.value.trim() !== '') {
-        e.preventDefault();
-        const newTags = renameDialog.tagsInput.value.split(',').map(t => t.trim()).filter(Boolean);
-        newTags.forEach(newTag => {
-          if (!tags.includes(newTag)) {
-            tags.push(newTag);
-          }
-        });
-        renderTagChips(tags, renameDialog.tagChipsContainer);
-        renameDialog.tagsInput.value = '';
-      }
-    };
-
-    renameDialog.tagChipsContainer.addEventListener('click', handleTagChipDelete, { signal });
-    renameDialog.tagsInput.addEventListener('keydown', handleTagInput, { signal });
-
-    showDialog(renameDialog);
-
-    renameDialog.confirm.onclick = () => {
-      const newTitle = renameDialog.input.value.trim();
+    // --- auto-save + close ------------------------------------------------
+    const commitAndClose = () => {
+      const newTitle = renameDialog.input.value.trim() || tab.title || host;
       const newNotes = renameDialog.notesInput.value.trim();
-      const remainingTagsFromInput = renameDialog.tagsInput.value.split(',').map(t => t.trim()).filter(Boolean);
-      const finalTags = [...new Set([...tags, ...remainingTagsFromInput])];
-      finalTags.forEach(tag => ui.availableTags.add(tag));
-      if (newTitle) {
-        callback(newTitle, finalTags, newNotes, todos);
-        hideDialog(renameDialog);
-        editDialogAbortController.abort(); // Clean up all event listeners
-        editDialogAbortController = null;
-      }
+      const pending = normalizeTag(renameDialog.tagsInput.value);
+      if (pending && !tags.some(t => t.toLowerCase() === pending.toLowerCase())) tags.push(pending);
+      tags.forEach(t => ui.availableTags.add(t));
+      callback(newTitle, [...tags], newNotes, todos);
+      hideDialog(renameDialog);
+      closeDropdown();
+      if (editDialogAbortController) { editDialogAbortController.abort(); editDialogAbortController = null; }
+      editDialogClose = null;
     };
+    editDialogClose = commitAndClose;
+    renameDialog.closeBtn.onclick = commitAndClose;
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !renameDialog.element.classList.contains('hidden') &&
+          renameDialog.tagSuggestions.classList.contains('hidden')) {
+        commitAndClose();
+      }
+    }, { signal });
+
+    renderChips();
+    renderTodos();
+    showDialog(renameDialog);
+    renameDialog.input.focus();
   };
 
   const openEditNoteDialog = (note, callback) => {
@@ -474,20 +585,6 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     };
   };
 
-  const renderTodoList = (todos, container) => {
-    container.innerHTML = '';
-    todos.forEach((todo, index) => {
-      const todoItem = document.createElement('div');
-      todoItem.className = `todo-item ${todo.completed ? 'completed' : ''}`;
-      todoItem.innerHTML = `
-        <input type="checkbox" id="todo-${index}" ${todo.completed ? 'checked' : ''}>
-        <label for="todo-${index}">${escapeHtml(todo.text)}</label>
-        <button class="delete-todo" data-index="${index}">&times;</button>
-      `;
-      container.appendChild(todoItem);
-    });
-  };
-
   const openDeleteDialog = (title, description, callback) => {
     deleteDialog.title.textContent = title;
     deleteDialog.description.textContent = description;
@@ -537,36 +634,6 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     // Collect tags from active tabs
     Object.values(state.tabMetadata).forEach(meta => meta.tags?.forEach(tag => ui.availableTags.add(tag)));
     updateTagFilters();
-  };
-
-  // Filter-status bar: live result count, active tag chips, "clear all".
-  // `tabMatchCount` is the number of currently-visible tabs (computed in render).
-  const updateFilterStatus = (tabMatchCount) => {
-    if (!filterStatus) return;
-    const activeTags = Array.from(ui.activeTagFilters).filter(t => t !== 'all');
-    const filtering = !!ui.searchTerm || activeTags.length > 0;
-
-    // The whole bar only shows while a filter is active.
-    filterStatus.classList.toggle('hidden', !filtering);
-    if (!filtering) { activeFilterChips.replaceChildren(); resultCount.textContent = ''; return; }
-
-    // Result count: include bookmark matches only when there's a search term.
-    const bmCount = ui.searchTerm ? countBookmarkMatches() : 0;
-    const tabLabel = `${tabMatchCount} tab${tabMatchCount === 1 ? '' : 's'}`;
-    resultCount.textContent = ui.searchTerm
-      ? `${tabLabel} · ${bmCount} bookmark${bmCount === 1 ? '' : 's'} match`
-      : `${tabLabel}`;
-
-    // Active tag filters as removable chips.
-    activeFilterChips.replaceChildren();
-    activeTags.forEach(tag => {
-      const chip = document.createElement('button');
-      chip.className = 'filter-chip';
-      chip.dataset.tag = tag;
-      chip.title = `Remove #${tag} filter`;
-      chip.innerHTML = `#${escapeHtml(tag)} <i class="ph ph-x"></i>`;
-      activeFilterChips.appendChild(chip);
-    });
   };
 
   const updateFilterButtonsState = () => {
@@ -811,7 +878,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
         const empty = document.createElement("div");
         empty.className = "board-empty-state";
         empty.innerHTML = `<i class="ph ph-magnifying-glass"></i><p>No tabs match your search or filters.</p><button class="board-empty-clear">Clear filters</button>`;
-        empty.querySelector('.board-empty-clear').addEventListener('click', () => clearFiltersBtn.click());
+        empty.querySelector('.board-empty-clear').addEventListener('click', clearAllFilters);
         cardsContainer.appendChild(empty);
       } else {
         const createCardLink = document.createElement("div");
@@ -820,9 +887,6 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
         createCardLink.addEventListener("click", openCreateCardDialog);
         cardsContainer.appendChild(createCardLink);
       }
-
-      // Update the filter-status bar (count + active-tag chips).
-      updateFilterStatus(visibleTabCount);
 
       // Restore scroll positions after rendering
       cardsContainer.scrollLeft = horizontalScrollPosition;
@@ -873,21 +937,23 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     const notes = metadata.notes || "";
     const todos = metadata.todos || [];
 
-    const incompleteTasks = todos.filter(t => !t.completed).length;
-    const allTasksComplete = todos.length > 0 && incompleteTasks === 0;
-    const taskBadgeClass = allTasksComplete ? 'task-badge-complete' : (incompleteTasks > 0 ? 'task-badge-incomplete' : '');
-    const taskBadgeHTML = todos.length > 0 ? `<span class="task-badge ${taskBadgeClass}" title="${incompleteTasks} incomplete task${incompleteTasks !== 1 ? 's' : ''}"><i class="ph ph-list-checks"></i> ${incompleteTasks}</span>` : '';
-
-    const linkActions = `<div class="link-actions">${taskBadgeHTML}<button class="action-button tab-edit" title="Edit tab"><i class="ph ph-dots-three"></i></button><button class="action-button tab-copy" title="Copy URL"><i class="ph ph-copy"></i></button></div>`;
+    // Hover actions: Edit (opens the editor) + Go-to-tab (switches to the tab).
+    // The card body itself is no longer a click target — see the click handler.
+    const linkActions = `<div class="link-actions">` +
+      `<button class="action-button tab-edit" title="Edit tab"><i class="ph ph-pencil-simple"></i></button>` +
+      `<button class="action-button tab-goto" title="Go to tab"><i class="ph ph-arrow-square-out"></i></button></div>`;
     // Tag chips are clickable filter shortcuts (data-tag drives toggleTagFilter).
     const tagsHTML = tags.length > 0 ? `<div class="tags-container">${tags.map(tag => `<span class="tag" data-tag="${escapeHtml(tag)}" title="Filter by #${escapeHtml(tag)}">${escapeHtml(tag)}</span>`).join('')}</div>` : '';
-    const notesHTML = notes ? `<div class="notes-container"><p>${escapeHtml(notes)}</p></div>` : '';
-    const todosSummaryHTML = todos.length > 0 ? `
-      <div class="todos-summary">
-        <i class="ph ph-check-square"></i>
-        <span>${todos.filter(t => t.completed).length}/${todos.length}</span>
-      </div>
-    ` : '';
+    // Note preview: full-width, clamped to a few lines with a trailing ellipsis.
+    const notesHTML = notes ? `<div class="notes-container" title="Edit notes"><p>${escapeHtml(notes)}</p></div>` : '';
+    // To-do legend (bottom-left). Clicking it opens the editor.
+    const todosSummaryHTML = todos.length > 0
+      ? `<div class="todos-summary" title="Edit to-dos"><i class="ph ph-check-square"></i><span>${todos.filter(t => t.completed).length}/${todos.length}</span></div>`
+      : '';
+    // Footer row: to-do legend anchored left, tags anchored right.
+    const footerHTML = (todos.length > 0 || tags.length > 0)
+      ? `<div class="tab-footer">${todosSummaryHTML}${tagsHTML}</div>`
+      : '';
     // Always show a favicon: prefer the tab's own favicon when it's a safe
     // http(s)/data URL, otherwise derive one from the tab's hostname. Chrome
     // frequently leaves favIconUrl empty (unloaded/discarded tabs), so gating on
@@ -897,7 +963,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
       : getFaviconUrl(tab.url);
     const faviconHTML = `<img src="${escapeHtml(faviconSrc)}" class="favicon" alt="">`;
 
-    listItem.innerHTML = `<div class="link-content">${faviconHTML}<div class="link-details"><span class="title">${escapeHtml(title)}</span>${tagsHTML}${notesHTML}${todosSummaryHTML}</div></div>${linkActions}`;
+    listItem.innerHTML = `<div class="tab-main">${faviconHTML}<span class="title">${escapeHtml(title)}</span>${linkActions}</div>${notesHTML}${footerHTML}`;
 
     listItem.addEventListener("dragstart", e => {
       isDragging = true;
@@ -963,8 +1029,9 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     });
 
     // One delegated click handler per tile, dispatched by zone. Click-zone model
-    // (v5): body = open/switch to the tab; tag chip = filter board by that tag;
-    // notes/todos preview = open editor; ⋯ = edit; copy = copy URL.
+    // (v5.1): the card body is NOT a click target (it caused confusion). Only the
+    // explicit affordances act — tag chip = filter; note / to-do legend = edit;
+    // ✎ = edit; ⇗ (go-to) = switch to the tab.
     listItem.addEventListener("click", async (e) => {
       if (wasDragGesture()) return; // ignore the click that ends a drag
 
@@ -974,27 +1041,16 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
         return;
       }
       if (e.target.closest('.tab-edit')) { openEdit(); return; }
-      if (e.target.closest('.tab-copy')) {
-        const btn = e.target.closest('.tab-copy');
-        try {
-          await navigator.clipboard.writeText(tab.url);
-          btn.classList.add('copied');
-          const icon = btn.querySelector('i');
-          if (icon) icon.className = 'ph ph-check';
-          setTimeout(() => {
-            btn.classList.remove('copied');
-            if (icon) icon.className = 'ph ph-copy';
-          }, 1200);
-        } catch { /* clipboard unavailable; no-op */ }
+      if (e.target.closest('.tab-goto')) {
+        await chrome.tabs.update(tab.id, { active: true });
+        await chrome.windows.update(tab.windowId, { focused: true });
         return;
       }
       if (e.target.closest('.notes-container') || e.target.closest('.todos-summary')) {
         openEdit();
         return;
       }
-      // Default zone (favicon, title, empty tile body) = open/switch to the tab.
-      await chrome.tabs.update(tab.id, { active: true });
-      await chrome.windows.update(tab.windowId, { focused: true });
+      // Anywhere else on the card: no action.
     });
 
     return listItem;
@@ -1657,7 +1713,6 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     // Clear input and re-render
     tagManagerDialog.input.value = '';
     renderTagManager();
-    updateTagSuggestions();
   };
 
   const deleteTag = (tagName) => {
@@ -1681,7 +1736,6 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
 
     saveData();
     renderTagManager();
-    updateTagSuggestions();
   };
 
   const tagManagerBtn = document.getElementById("tag-manager-btn");
@@ -1774,21 +1828,15 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     render();
   });
 
-  // "Clear all" resets both the search term and tag filters.
-  clearFiltersBtn.addEventListener("click", () => {
+  // Reset both the search term and tag filters (used by the empty-state button).
+  const clearAllFilters = () => {
     ui.searchTerm = '';
     searchInput.value = '';
     searchClearBtn.classList.add('hidden');
     ui.activeTagFilters.clear();
     ui.activeTagFilters.add('all');
     render();
-  });
-
-  // Remove a single active tag filter by clicking its chip's ×.
-  activeFilterChips.addEventListener("click", (e) => {
-    const chip = e.target.closest('.filter-chip[data-tag]');
-    if (chip) toggleTagFilter(chip.dataset.tag); // toggle off (it's active) + render
-  });
+  };
 
   // Toggle a tag in the active filter set. 'all' resets to show everything;
   // any other tag is added/removed (and we fall back to 'all' when none remain).

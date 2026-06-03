@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
   <title>TabKan</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -68,12 +69,6 @@
             <button class="filter-btn tag-filter active" data-tag="all">All</button>
           </div>
         </div>
-
-        <div id="filter-status" class="filter-status hidden">
-          <span id="result-count" class="result-count"></span>
-          <span id="active-filter-chips" class="active-filter-chips"></span>
-          <button id="clear-filters" class="clear-filters">Clear all</button>
-        </div>
       </div>
       <div id="cards-container" class="fullpage-cards-grid"></div>
     </div>
@@ -82,35 +77,43 @@
   <!-- Dialogs -->
   <div id="dialog-overlay" class="hidden"></div>
 
-  <div id="rename-dialog" class="dialog dialog-wide hidden">
-    <h3 class="dialog-title">Edit Tab</h3>
-    <div class="dialog-columns">
-      <div class="dialog-column">
-        <div class="dialog-field">
-          <label for="rename-input">Title</label>
-          <input type="text" id="rename-input" class="dialog-input">
-        </div>
-        <div class="dialog-field">
-          <label for="notes-input">Notes</label>
-          <textarea id="notes-input" class="dialog-input" placeholder="Add notes..."></textarea>
-        </div>
+  <div id="rename-dialog" class="dialog edit-tab-modal hidden" role="dialog" aria-modal="true" aria-labelledby="edit-tab-host">
+    <div class="etm-head">
+      <span class="etm-fav"><img id="edit-tab-favicon" src="" alt=""></span>
+      <div class="etm-id">
+        <div class="etm-eyebrow">Edit Tab</div>
+        <div class="etm-host" id="edit-tab-host"></div>
       </div>
-      <div class="dialog-column">
-        <div class="dialog-field">
-          <label for="tags-input">Tags</label>
-          <div id="tag-chips-container"></div>
-          <input type="text" id="tags-input" class="dialog-input" placeholder="Add a tag and press Enter..." list="tag-suggestions">
-          <datalist id="tag-suggestions"></datalist>
-        </div>
-        <div class="dialog-field">
-          <label for="add-todo-input">To-Do List</label>
-          <div id="todo-list-container"></div>
-          <input type="text" id="add-todo-input" class="dialog-input" placeholder="Add a to-do and press Enter...">
-        </div>
-      </div>
+      <span id="edit-tab-saved" class="etm-saved"><i class="ph ph-check-circle"></i> Saved automatically</span>
+      <button id="edit-tab-close" class="etm-close" aria-label="Close and save"><i class="ph ph-x"></i></button>
     </div>
-    <div class="dialog-actions">
-      <button id="rename-confirm" class="btn btn-primary">Save</button>
+    <div class="etm-body">
+      <div class="etm-col">
+        <div class="etm-field">
+          <div class="etm-flabel"><label for="rename-input">Title</label></div>
+          <input type="text" id="rename-input" class="etm-input">
+        </div>
+        <div class="etm-field">
+          <div class="etm-flabel"><label for="notes-input">Notes</label></div>
+          <textarea id="notes-input" class="etm-input etm-notes" placeholder="Add notes..."></textarea>
+        </div>
+      </div>
+      <div class="etm-col">
+        <div class="etm-field etm-tagfield">
+          <div class="etm-flabel"><label for="tags-input">Tags</label></div>
+          <div id="tag-box" class="etm-tagbox">
+            <input type="text" id="tags-input" class="etm-taginput" placeholder="Add a tag…" autocomplete="off">
+          </div>
+          <div id="tag-suggestions" class="etm-tagdd hidden"></div>
+        </div>
+        <div class="etm-field">
+          <div class="etm-flabel"><label for="add-todo-input">To-Do</label><span id="todo-count" class="etm-count"></span></div>
+          <div class="etm-todos-wrap">
+            <div id="todo-list-container" class="etm-todos"></div>
+          </div>
+          <input type="text" id="add-todo-input" class="etm-input" placeholder="Add a to-do…" autocomplete="off">
+        </div>
+      </div>
     </div>
   </div>
 

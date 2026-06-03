@@ -40,6 +40,68 @@ export const distanceSq = (ax, ay, bx, by) => {
 export const movedLikeDrag = (downX, downY, upX, upY, threshold = DRAG_CLICK_THRESHOLD_PX) =>
   distanceSq(downX, downY, upX, upY) > threshold * threshold;
 
+// --- Edit-tab modal helpers ---------------------------------------------
+
+// Normalize a raw tag string: trim, strip leading '#'(s), collapse internal
+// whitespace. Returns '' for empty/garbage. Tags are stored WITHOUT a '#'.
+export const normalizeTag = (raw) => {
+  if (raw == null) return '';
+  return String(raw).trim().replace(/^#+/, '').trim().replace(/\s+/g, ' ');
+};
+
+// Completed / total counts for a to-do list (tolerant of missing fields).
+export const todoProgress = (todos) => {
+  const list = Array.isArray(todos) ? todos : [];
+  const done = list.filter(t => t && t.completed).length;
+  return { done, total: list.length };
+};
+
+// Autocomplete suggestions for the tag input.
+//   allTags - iterable of known tag names (no '#')
+//   query   - what the user typed (may include '#')
+//   applied - tags already on this item (excluded from suggestions)
+//   limit   - max suggestions to return
+// Returns { matches, showCreate, createValue }:
+//   matches     - matching tag names, prefix-matches first, then alphabetical
+//   showCreate  - true when the query is non-empty, isn't an exact existing tag,
+//                 and isn't already applied → offer a "Create #x" row
+//   createValue - the normalized tag the create row would add
+export const suggestTags = (allTags, query, applied = [], limit = 6) => {
+  const q = normalizeTag(query).toLowerCase();
+  const appliedSet = new Set(Array.from(applied, t => normalizeTag(t).toLowerCase()));
+  const all = Array.from(allTags || []);
+  let matches = [];
+  if (q) {
+    matches = all
+      .filter(t => {
+        const lc = normalizeTag(t).toLowerCase();
+        return lc.includes(q) && !appliedSet.has(lc);
+      })
+      .sort((a, b) => {
+        const la = a.toLowerCase(), lb = b.toLowerCase();
+        const pa = la.startsWith(q) ? 0 : 1, pb = lb.startsWith(q) ? 0 : 1;
+        if (pa !== pb) return pa - pb;
+        return la.localeCompare(lb);
+      })
+      .slice(0, limit);
+  }
+  const existsExact = all.some(t => normalizeTag(t).toLowerCase() === q);
+  const showCreate = q.length > 0 && !existsExact && !appliedSet.has(q);
+  return { matches, showCreate, createValue: normalizeTag(query) };
+};
+
+// Split a tag name around the first case-insensitive occurrence of `query`,
+// for highlighting the matched run: returns [before, match, after].
+// No match (or empty query) → [name, '', ''].
+export const splitMatch = (name, query) => {
+  const n = String(name ?? '');
+  const q = normalizeTag(query).toLowerCase();
+  if (!q) return [n, '', ''];
+  const i = n.toLowerCase().indexOf(q);
+  if (i < 0) return [n, '', ''];
+  return [n.slice(0, i), n.slice(i, i + q.length), n.slice(i + q.length)];
+};
+
 // Debug logging (flip DEBUG to true to trace render/drag flow).
 export const DEBUG = false;
 export const log = (...args) => DEBUG && console.log(...args);

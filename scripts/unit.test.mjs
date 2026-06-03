@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   escapeHtml, getFaviconUrl, distanceSq, movedLikeDrag, DRAG_CLICK_THRESHOLD_PX,
+  normalizeTag, todoProgress, suggestTags, splitMatch,
 } from '../src/utils.js';
 
 test('escapeHtml encodes all five HTML-sensitive characters', () => {
@@ -54,4 +55,61 @@ test('movedLikeDrag: a move beyond threshold is a drag', () => {
 test('movedLikeDrag: respects a custom threshold', () => {
   assert.equal(movedLikeDrag(0, 0, 8, 0, 10), false);
   assert.equal(movedLikeDrag(0, 0, 12, 0, 10), true);
+});
+
+// --- Edit-tab modal helpers ---------------------------------------------
+
+test('normalizeTag strips leading #, trims, collapses whitespace', () => {
+  assert.equal(normalizeTag('  #Design  '), 'Design');
+  assert.equal(normalizeTag('##job  hunt'), 'job hunt');
+  assert.equal(normalizeTag(''), '');
+  assert.equal(normalizeTag(null), '');
+  assert.equal(normalizeTag(undefined), '');
+});
+
+test('todoProgress counts completed / total', () => {
+  assert.deepEqual(todoProgress([]), { done: 0, total: 0 });
+  assert.deepEqual(todoProgress(undefined), { done: 0, total: 0 });
+  assert.deepEqual(
+    todoProgress([{ completed: true }, { completed: false }, { completed: true }]),
+    { done: 2, total: 3 });
+});
+
+test('suggestTags: prefix matches rank before substring matches', () => {
+  const all = ['design', 'design-system', 'desk-research', 'redesign'];
+  const { matches } = suggestTags(all, 'des', []);
+  // prefix hits (design, design-system, desk-research) before substring (redesign)
+  assert.deepEqual(matches, ['design', 'design-system', 'desk-research', 'redesign']);
+});
+
+test('suggestTags: empty query yields no matches and no create row', () => {
+  const r = suggestTags(['a', 'b'], '   ', []);
+  assert.deepEqual(r.matches, []);
+  assert.equal(r.showCreate, false);
+});
+
+test('suggestTags: excludes already-applied tags from matches', () => {
+  const { matches } = suggestTags(['design', 'design-system'], 'des', ['design']);
+  assert.deepEqual(matches, ['design-system']);
+});
+
+test('suggestTags: showCreate is false on an exact existing tag, true otherwise', () => {
+  assert.equal(suggestTags(['design'], 'design', []).showCreate, false);   // exact exists
+  assert.equal(suggestTags(['design'], '#design', []).showCreate, false);  // exact after normalize
+  assert.equal(suggestTags(['design'], 'desi', []).showCreate, true);      // novel
+  assert.equal(suggestTags(['design'], 'desi', ['desi']).showCreate, false); // already applied
+  assert.equal(suggestTags(['design'], '#new-tag', []).createValue, 'new-tag');
+});
+
+test('suggestTags: respects the limit', () => {
+  const all = Array.from({ length: 20 }, (_, i) => `tag${i}`);
+  assert.equal(suggestTags(all, 'tag', [], 5).matches.length, 5);
+});
+
+test('splitMatch: splits around the case-insensitive match for highlighting', () => {
+  assert.deepEqual(splitMatch('design-system', 'des'), ['', 'des', 'ign-system']);
+  assert.deepEqual(splitMatch('redesign', 'des'), ['re', 'des', 'ign']);
+  assert.deepEqual(splitMatch('Design', 'des'), ['', 'Des', 'ign']); // keeps original case
+  assert.deepEqual(splitMatch('design', 'xyz'), ['design', '', '']); // no match
+  assert.deepEqual(splitMatch('design', ''), ['design', '', '']);    // empty query
 });

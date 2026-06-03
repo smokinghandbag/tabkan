@@ -5,6 +5,33 @@ All notable changes to the **TabKan** extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.1] — 2026-06-03
+
+A redesign of the tab editor and tab cards, plus a leaner toolbar.
+
+### Added
+- **Redesigned Edit Tab dialog** — a cleaner, balanced two-column layout with a
+  favicon/identity header. Changes now **save automatically** when you close the
+  dialog (via ✕, clicking outside, or Esc) — no more Save button.
+- **Tag autocomplete** — start typing a tag and matching existing tags appear in
+  a dropdown (with how many tabs use each), so you reuse tags instead of creating
+  near-duplicates. Pick with the mouse or ↑/↓ + Enter, or create a new one.
+- The dialog's to-do list now scrolls within the dialog and shows a live
+  done/total count, so long lists stay tidy.
+
+### Changed
+- **Redesigned tab cards** — the note preview now spans the full width of the
+  card and fades out when it's longer than the preview; the to-do count sits at
+  the bottom-left and tags at the bottom-right.
+- **Card hover actions** are now **Edit** and **Go to tab**. Clicking a card's
+  body no longer switches tabs (it was easy to trigger by accident) — use the
+  Go-to-tab action, or click a note / to-do count to jump straight into editing.
+
+### Removed
+- The filter-status bar (result count + active-filter chips). The tag filters
+  already show what's active — click **All** to reset, and the empty-state still
+  offers a one-click "Clear filters".
+
 ## [5.0.1] — 2026-06-02
 
 ### Fixed
@@ -69,6 +96,7 @@ First public, open-source release.
 - Stored-XSS hardening across the dashboard and side panel (all untrusted data
   escaped before rendering); tightened Content Security Policy.
 
+[5.1]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.1
 [5.0.1]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.0.1
 [5.0]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.0
 [4.4]: https://github.com/smokinghandbag/tabkan/releases/tag/v4.4

@@ -8,15 +8,18 @@ export const sidebarScrollWrapper = document.querySelector(".sidebar-scroll-wrap
 export const dialogOverlay = document.getElementById("dialog-overlay");
 export const renameDialog = {
     element: document.getElementById("rename-dialog"),
-    title: document.querySelector("#rename-dialog .dialog-title"),
+    favicon: document.getElementById("edit-tab-favicon"),
+    host: document.getElementById("edit-tab-host"),
+    saved: document.getElementById("edit-tab-saved"),
+    closeBtn: document.getElementById("edit-tab-close"),
     input: document.getElementById("rename-input"),
+    tagBox: document.getElementById("tag-box"),
     tagsInput: document.getElementById("tags-input"),
+    tagSuggestions: document.getElementById("tag-suggestions"),
     notesInput: document.getElementById("notes-input"),
     todoListContainer: document.getElementById("todo-list-container"),
+    todoCount: document.getElementById("todo-count"),
     addTodoInput: document.getElementById("add-todo-input"),
-    tagSuggestions: document.getElementById("tag-suggestions"),
-    tagChipsContainer: document.getElementById("tag-chips-container"),
-    confirm: document.getElementById("rename-confirm"),
   };
 export const deleteDialog = {
     element: document.getElementById("delete-dialog"),
@@ -77,10 +80,6 @@ export const tagManagerDialog = {
   };
 export const searchInput = document.getElementById("search-input");
 export const searchClearBtn = document.getElementById("search-clear");
-export const filterStatus = document.getElementById("filter-status");
-export const resultCount = document.getElementById("result-count");
-export const activeFilterChips = document.getElementById("active-filter-chips");
-export const clearFiltersBtn = document.getElementById("clear-filters");
 export const sidebar = document.querySelector(".sidebar");
 export const sidebarToggle = document.getElementById("sidebar-toggle");
 export const sidebarCollapseBtn = document.getElementById("sidebar-collapse-btn");

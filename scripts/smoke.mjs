@@ -45,7 +45,7 @@ const chrome = {
     onCreated: listener(), onRemoved: listener(), onUpdated: listener(),
   },
   storage: {
-    sync: { get: async () => ({}), set: async () => {} },
+    sync: { get: async () => ({}), set: async (obj) => { chrome.storage.sync._writes.push(obj); } },
     local: { get: async () => ({}), set: async () => {} },
     onChanged: listener(),
   },
@@ -62,10 +62,13 @@ const chrome = {
     onCreated: listener(), onRemoved: listener(), onChanged: listener(), onMoved: listener(),
   },
   windows: { WINDOW_ID_CURRENT: -2, getCurrent: async () => ({ id: 1 }), update: async () => {}, create: async () => ({ id: 2 }) },
+  // (storage.sync._writes initialized below)
   contextMenus: { create() {}, onClicked: listener() },
   sidePanel: { open: async () => {}, setPanelBehavior: async () => {} },
   action: { onClicked: listener() },
 };
+
+chrome.storage.sync._writes = [];
 
 // --- install globals the module expects ----------------------------------
 let rafId = 0;
@@ -86,6 +89,9 @@ globalThis.cancelAnimationFrame = window.cancelAnimationFrame;
 globalThis.confirm = window.confirm;
 globalThis.alert = window.alert;
 globalThis.getComputedStyle = window.getComputedStyle.bind(window);
+// Use jsdom's AbortController so signals passed to jsdom's addEventListener match
+// its realm (Node's global AbortSignal is a different type and jsdom rejects it).
+if (window.AbortController) globalThis.AbortController = window.AbortController;
 if (typeof globalThis.Blob === 'undefined') globalThis.Blob = window.Blob;
 
 // Surface async errors
@@ -120,6 +126,9 @@ try {
   fire(doc.getElementById('settings-btn'), 'click');       // open settings dialog
   fire(doc.getElementById('open-sessions-btn'), 'click');  // → sessions.js renderSessions
   fire(doc.getElementById('tag-manager-btn'), 'click');    // tag manager (now inline w/ filters)
+  // exercise tag-manager add (Enter) — this path previously called a now-removed helper
+  const tmInput = doc.getElementById('tag-manager-input');
+  if (tmInput) { tmInput.value = 'smoke-tag'; tmInput.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); }
   fire(doc.getElementById('toggle-all-cards-btn'), 'click');
   await new Promise(r => setTimeout(r, 200));
 } catch (err) {
@@ -150,7 +159,7 @@ if (cards.length === 0 || sidebarCard.length === 0) {
   process.exit(1);
 }
 
-// --- Block 1: tile click-zone behaviour ---------------------------------
+// --- Block 1: tile click-zone behaviour (v5.1 model) --------------------
 // Clear the search filter from earlier so tiles are visible again.
 try {
   const search = doc.getElementById('search-input');
@@ -159,24 +168,36 @@ try {
 
   const clickAt = (el) => el && el.dispatchEvent(new window.MouseEvent('click', { bubbles: true, clientX: 0, clientY: 0 }));
 
-  // (a) Clicking the tile body should open/switch to the tab (chrome.tabs.update active:true).
-  tabsData._updates = [];
   const firstTile = doc.querySelector('#cards-container .tab-item');
   if (!firstTile) { console.error('FAIL: no tab-item rendered to click'); process.exit(1); }
-  // pointerdown/up with no movement → a real click, not a drag
+
+  // (a) Clicking the tile BODY (title) must NOT open the tab anymore.
+  tabsData._updates = [];
   firstTile.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, clientX: 5, clientY: 5 }));
   firstTile.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true, clientX: 5, clientY: 5 }));
   clickAt(firstTile.querySelector('.title') || firstTile);
   await new Promise(r => setTimeout(r, 50));
-  const openedTab = (tabsData._updates || []).some(u => u.props && u.props.active === true);
-  console.log(`tile body opens tab: ${openedTab}`);
-  if (!openedTab) { console.error('FAIL: clicking tile body did not activate the tab'); process.exit(1); }
+  const bodyOpened = (tabsData._updates || []).some(u => u.props && u.props.active === true);
+  console.log(`tile body is inert (no open): ${!bodyOpened}`);
+  if (bodyOpened) { console.error('FAIL: clicking the tile body should not open the tab'); process.exit(1); }
 
-  // (b) A drag gesture (pointer moved > threshold) must NOT open the tab.
+  // (b) Clicking the go-to (⇗) hover action opens/switches to the tab.
+  tabsData._updates = [];
+  const gotoBtn = firstTile.querySelector('.tab-goto');
+  if (!gotoBtn) { console.error('FAIL: no .tab-goto action on tile'); process.exit(1); }
+  firstTile.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, clientX: 5, clientY: 5 }));
+  firstTile.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true, clientX: 5, clientY: 5 }));
+  clickAt(gotoBtn);
+  await new Promise(r => setTimeout(r, 50));
+  const openedViaGoto = (tabsData._updates || []).some(u => u.props && u.props.active === true);
+  console.log(`go-to action opens tab: ${openedViaGoto}`);
+  if (!openedViaGoto) { console.error('FAIL: go-to action did not activate the tab'); process.exit(1); }
+
+  // (c) A drag gesture (pointer moved > threshold) must suppress the go-to click.
   tabsData._updates = [];
   firstTile.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, clientX: 5, clientY: 5 }));
   firstTile.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true, clientX: 40, clientY: 5 }));
-  clickAt(firstTile.querySelector('.title') || firstTile);
+  clickAt(gotoBtn);
   await new Promise(r => setTimeout(r, 50));
   const openedAfterDrag = (tabsData._updates || []).some(u => u.props && u.props.active === true);
   console.log(`drag gesture suppressed click: ${!openedAfterDrag}`);
@@ -191,37 +212,39 @@ if (errors.length) {
   process.exit(1);
 }
 
-// --- Block 2: search/filter status + empty state ------------------------
+// --- Block 2: search clear (×) + empty state ----------------------------
+// (the redundant filter-status bar was removed; tag filters + the search ×
+//  communicate state, and the empty state offers a full reset)
 try {
   const search = doc.getElementById('search-input');
   const clearBtn = doc.getElementById('search-clear');
-  const status = doc.getElementById('filter-status');
-  const count = doc.getElementById('result-count');
 
-  // (a) A matching search reveals the clear button, status bar, and a count.
+  // the filter-status bar should no longer exist in the DOM
+  if (doc.getElementById('filter-status')) { console.error('FAIL: filter-status bar should have been removed'); process.exit(1); }
+  console.log('filter-status bar removed: true');
+
+  // (a) A matching search reveals the search clear (×) button.
   search.value = 'example'; fire(search, 'input');
   await new Promise(r => setTimeout(r, 450));
   const clearShown = clearBtn && !clearBtn.classList.contains('hidden');
-  const statusShown = status && !status.classList.contains('hidden');
-  console.log(`search shows clear+status: ${clearShown && statusShown}`);
-  console.log(`result count text: "${count && count.textContent}"`);
-  if (!clearShown || !statusShown) { console.error('FAIL: search did not reveal clear button / status bar'); process.exit(1); }
-  if (!/\btab(s)?\b/.test(count.textContent || '')) { console.error('FAIL: result count missing'); process.exit(1); }
+  console.log(`search reveals × clear button: ${clearShown}`);
+  if (!clearShown) { console.error('FAIL: search did not reveal the × clear button'); process.exit(1); }
 
-  // (b) A no-match search shows the empty state.
+  // (b) A no-match search shows the empty state with a "Clear filters" button.
   search.value = 'zzz-no-such-tab-xyz'; fire(search, 'input');
   await new Promise(r => setTimeout(r, 450));
   const emptyState = doc.querySelector('#cards-container .board-empty-state');
-  console.log(`empty state on no match: ${!!emptyState}`);
-  if (!emptyState) { console.error('FAIL: no empty state shown for a zero-match search'); process.exit(1); }
+  const emptyClear = emptyState && emptyState.querySelector('.board-empty-clear');
+  console.log(`empty state with clear button on no match: ${!!emptyClear}`);
+  if (!emptyClear) { console.error('FAIL: no empty state / clear button for a zero-match search'); process.exit(1); }
 
-  // (c) Clearing search hides the status bar and restores the board.
-  clearBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  // (c) The empty-state "Clear filters" button restores the board.
+  emptyClear.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await new Promise(r => setTimeout(r, 450));
-  const statusHidden = status.classList.contains('hidden');
   const boardBack = !!doc.querySelector('#cards-container .card');
-  console.log(`clear restores board: ${statusHidden && boardBack}`);
-  if (!statusHidden || !boardBack) { console.error('FAIL: clearing search did not restore the board'); process.exit(1); }
+  const searchReset = doc.getElementById('search-input').value === '';
+  console.log(`empty-state clear restores board: ${boardBack && searchReset}`);
+  if (!boardBack || !searchReset) { console.error('FAIL: empty-state clear did not restore the board'); process.exit(1); }
 } catch (err) {
   console.error('SEARCH/FILTER ERROR:\n', err);
   process.exit(1);
@@ -247,6 +270,75 @@ if (errors.length) {
   const nowExpanded = !topFolder.classList.contains('collapsed');
   console.log(`bookmark folder toggles open: ${nowExpanded}`);
   if (!nowExpanded) { console.error('FAIL: folder toggle did not expand'); process.exit(1); }
+}
+
+// --- v5.1: Edit Tab modal (redesign + auto-save + tag autocomplete) -----
+try {
+  // restore the board
+  const search = doc.getElementById('search-input');
+  if (search) { search.value = ''; fire(search, 'input'); }
+  await new Promise(r => setTimeout(r, 450));
+
+  const tile = doc.querySelector('#cards-container .tab-item');
+  const editBtn = tile && tile.querySelector('.tab-edit');
+  if (!editBtn) { console.error('FAIL: no .tab-edit button to open the modal'); process.exit(1); }
+  // clean pointerdown/up (no movement) resets the drag-gesture guard from earlier tests
+  editBtn.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, clientX: 5, clientY: 5 }));
+  editBtn.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true, clientX: 5, clientY: 5 }));
+  editBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true, clientX: 5, clientY: 5 }));
+  await new Promise(r => setTimeout(r, 30));
+
+  const modal = doc.getElementById('rename-dialog');
+  const modalOpen = modal && !modal.classList.contains('hidden');
+  const hostShown = (doc.getElementById('edit-tab-host').textContent || '').length > 0;
+  console.log(`edit modal opens with identity header: ${modalOpen && hostShown}`);
+  if (!modalOpen || !hostShown) { console.error('FAIL: edit modal did not open with host identity'); process.exit(1); }
+
+  // add a tag via the chips-in-field input (Enter commits)
+  const tagsInput = doc.getElementById('tags-input');
+  tagsInput.value = 'work';
+  tagsInput.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  const chipAdded = !!doc.querySelector('#tag-box .etm-chip');
+  console.log(`tag chip added inline: ${chipAdded}`);
+  if (!chipAdded) { console.error('FAIL: tag chip not added'); process.exit(1); }
+
+  // autocomplete: typing a prefix of the just-added tag should surface a suggestion
+  tagsInput.value = 'wo';
+  tagsInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+  const dd = doc.getElementById('tag-suggestions');
+  const ddShown = dd && !dd.classList.contains('hidden') && !!dd.querySelector('[data-add]');
+  console.log(`tag autocomplete dropdown shows matches: ${ddShown}`);
+  if (!ddShown) { console.error('FAIL: autocomplete dropdown did not show a match'); process.exit(1); }
+  tagsInput.value = ''; // clear pending text so it isn't committed as a stray tag
+
+  // add a to-do; the count should reflect it
+  const addTodo = doc.getElementById('add-todo-input');
+  addTodo.value = 'ship it';
+  addTodo.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  const todoRow = doc.querySelector('#todo-list-container .etm-todo');
+  const countText = doc.getElementById('todo-count').textContent;
+  console.log(`to-do added, count="${countText}": ${!!todoRow}`);
+  if (!todoRow || !/\/\s*1/.test(countText)) { console.error('FAIL: to-do not added / count wrong'); process.exit(1); }
+
+  // close via the ✕ → must auto-save (no Save button)
+  chrome.storage.sync._writes = [];
+  doc.getElementById('edit-tab-close').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  const closed = modal.classList.contains('hidden');
+  await new Promise(r => setTimeout(r, 650)); // saveData debounce is 500ms
+  const persisted = chrome.storage.sync._writes.some(w =>
+    w.tabMetadata && Object.values(w.tabMetadata).some(m =>
+      m && Array.isArray(m.tags) && m.tags.includes('work') &&
+      Array.isArray(m.todos) && m.todos.some(t => t.text === 'ship it')));
+  console.log(`modal closes and auto-saves edits: ${closed && persisted}`);
+  if (!closed || !persisted) { console.error('FAIL: modal did not auto-save on close'); process.exit(1); }
+} catch (err) {
+  console.error('EDIT MODAL ERROR:\n', err);
+  process.exit(1);
+}
+if (errors.length) {
+  console.error(`RUNTIME ERRORS after edit modal (${errors.length}):`);
+  for (const e of errors.slice(0, 8)) console.error(' -', e && e.stack ? e.stack.split('\n').slice(0,4).join('\n') : e);
+  process.exit(1);
 }
 
 // --- Block 3/refresh: combined toolbar row ------------------------------

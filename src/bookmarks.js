@@ -16,28 +16,6 @@ export const invalidateBookmarkCache = () => {
     bookmarksDirty = true;
   };
 
-  // Count how many bookmarks match the current search term (for the result count
-  // in the filter status bar). Walks the cached tree if present, else 0.
-export const countBookmarkMatches = () => {
-    if (!ui.searchTerm) return 0;
-    const tree = cachedBookmarkTree;
-    if (!tree) return 0;
-    const term = ui.searchTerm.toLowerCase();
-    let count = 0;
-    const walk = (nodes) => {
-      for (const n of nodes || []) {
-        if (n.url) {
-          if ((n.title && n.title.toLowerCase().includes(term)) ||
-              (n.url && n.url.toLowerCase().includes(term))) count++;
-        } else if (n.children) {
-          walk(n.children);
-        }
-      }
-    };
-    walk(tree);
-    return count;
-  };
-
   // Render Bookmarks Card (Sleeping tabs)
 export const renderBookmarks = async () => {
     try {
