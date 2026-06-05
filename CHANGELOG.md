@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Restart guidance.** The welcome page and Settings now explain how to turn on
   Chrome's "Continue where you left off" startup option so your tabs and groups
   survive a browser restart.
+- **Version link.** The version number in the top-right of the dashboard now links
+  to that version's release notes on GitHub.
 
 ### Changed
 - The **All Tasks** roll-up in the sidebar now stays hidden until you've added at

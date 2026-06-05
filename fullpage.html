@@ -69,6 +69,10 @@
           <div class="filter-buttons tag-filters" id="tag-filters">
             <button class="filter-btn tag-filter active" data-tag="all">All</button>
           </div>
+          <!-- Version → release notes on GitHub. Text + href are set from the
+               manifest version at runtime (src/app.js), so this always points to
+               the current version's release and needs no per-release edits. -->
+          <a id="app-version-link" class="app-version-link" target="_blank" rel="noopener noreferrer" title="View release notes on GitHub"></a>
         </div>
       </div>
       <div id="cards-container" class="fullpage-cards-grid"></div>

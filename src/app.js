@@ -2109,6 +2109,19 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
   });
 
   const init = async () => {
+    // Top-right version label → GitHub release notes for the running version.
+    // Built from the manifest version so it auto-tracks every future release with
+    // no per-version edit. Guarded (optional chaining + try/catch) so the jsdom
+    // smoke harness — whose chrome.runtime mock has no getManifest — is unaffected.
+    try {
+      const versionLink = document.getElementById('app-version-link');
+      const version = chrome.runtime.getManifest?.().version;
+      if (versionLink && version) {
+        versionLink.textContent = `v ${version}`;
+        versionLink.href = `https://github.com/smokinghandbag/tabkan/releases/tag/v${version}`;
+      }
+    } catch { /* version link is non-essential; ignore */ }
+
     const data = await chrome.storage.sync.get(["tabMetadata", "sidebarCollapsed", "sleepingTabs", "collapsedCards", "settings"]);
     state.tabMetadata = data.tabMetadata || {};
     state.sidebarCollapsed = data.sidebarCollapsed || false;
