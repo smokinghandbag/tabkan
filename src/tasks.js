@@ -101,6 +101,23 @@ export const renderTaskRollup = async (allTasks = null) => {
       allTasks = await aggregateAllTasks();
     }
 
+    // Hide the whole roll-up until the user has created at least one task on any
+    // tab. Deliberately distinct from "the current filter matched none" (handled
+    // below with an empty-state message): when zero tasks exist at all there's
+    // nothing to filter, so showing an empty card is just noise.
+    //
+    // We toggle `.rollup-hidden` rather than clearing innerHTML so the hide is a
+    // graceful fade/slide (see #task-rollup-container in styles.css) instead of a
+    // flash — the previously rendered markup stays in place to animate out, and
+    // the container's transitioned `display:none` drops it from the sidebar's
+    // flex layout so the column gap collapses from two to one. Mirrors
+    // renderCollapsedTaskRollup, which already hides itself at zero.
+    if (allTasks.length === 0) {
+      taskRollupContainer.classList.add('rollup-hidden');
+      return;
+    }
+    taskRollupContainer.classList.remove('rollup-hidden');
+
     // Check if card is collapsed
     const isCardCollapsed = state.collapsedCards['task-rollup-card'] || false;
 

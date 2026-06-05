@@ -5,6 +5,26 @@ All notable changes to the **TabKan** extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.3.0] — 2026-06-05
+
+### Added
+- **Workspace recovery.** If Chrome reopens without your tabs (e.g. you haven't
+  enabled "Continue where you left off" and quit the browser), TabKan now offers
+  to restore your previous workspace. It keeps a private, local auto-snapshot of
+  your tab groups and tabs while the dashboard is open, and shows a one-click
+  **Restore** prompt the next time you open the dashboard to an empty window.
+- **Restart guidance.** The welcome page and Settings now explain how to turn on
+  Chrome's "Continue where you left off" startup option so your tabs and groups
+  survive a browser restart.
+
+### Changed
+- The **All Tasks** roll-up in the sidebar now stays hidden until you've added at
+  least one to-do to a tab, instead of showing an empty card — and it fades in
+  and out smoothly rather than flashing. When hidden it no longer leaves an empty
+  gap between the Ungrouped Tabs and Bookmarks sections.
+- Renamed the sidebar's **Unfiled Tabs** section to **Ungrouped Tabs** (matching
+  Chrome's own wording for tabs that aren't in a group).
+
 ## [5.2.1] — 2026-06-03
 
 ### Added

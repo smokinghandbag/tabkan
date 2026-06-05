@@ -183,6 +183,28 @@ body.fullpage-body {
 
 #task-rollup-container {
   flex: 0 0 auto;
+  /* Graceful show/hide. `display` is discrete-animated (Chrome 117+) so when the
+     card is hidden the container leaves the sidebar's flex layout entirely —
+     collapsing the column gap to ONE gap between Ungrouped Tabs and Bookmarks
+     instead of two. opacity/transform fade + slide it in and out. */
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.22s ease, transform 0.22s ease,
+              display 0.22s ease allow-discrete;
+}
+
+#task-rollup-container.rollup-hidden {
+  display: none;
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+/* Entry animation: start faded/offset, then transition in once shown. */
+@starting-style {
+  #task-rollup-container:not(.rollup-hidden) {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
 }
 
 .task-rollup-card {
@@ -2185,6 +2207,23 @@ body.dnd-active .card {
   line-height: 1.4;
 }
 
+.setting-description strong { color: var(--card-foreground); font-weight: 600; }
+
+/* Inline path/code snippet inside a setting description (e.g. chrome:// URLs). */
+.setting-code {
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.85em;
+  color: var(--card-foreground);
+  white-space: nowrap;
+}
+
+/* Info-only setting row (no control on the right): let the text use full width. */
+.setting-item-stacked { display: block; }
+.setting-item-stacked .setting-description { line-height: 1.5; }
+
 /* Appearance: segmented Light/Dark control */
 .theme-toggle {
   display: inline-flex;
@@ -2658,4 +2697,56 @@ body.fullpage-body button {
   padding-bottom: 0;
   margin-bottom: 0;
   border-bottom-color: transparent;
+}
+
+/* --- Workspace recovery banner -------------------------------------------- */
+/* Shown on dashboard load when Chrome reopened without the user's tabs and an
+   auto-saved snapshot is available to restore. Built in src/sessions.js. */
+.tk-recovery-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  max-width: min(720px, calc(100vw - 32px));
+  padding: 0.85rem 1.1rem;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 48px -16px rgba(0, 0, 0, 0.55);
+  animation: tk-recovery-in 0.18s ease-out;
+}
+@keyframes tk-recovery-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+.tk-recovery-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.tk-recovery-icon {
+  font-size: 1.5rem;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+.tk-recovery-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--card-foreground);
+}
+.tk-recovery-sub {
+  font-size: 0.82rem;
+  color: var(--muted-foreground);
+  margin-top: 0.1rem;
+}
+.tk-recovery-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }

@@ -189,7 +189,7 @@
       if (ungroupedTabs.length > 0) {
         const ungroupedSection = createGroupElement({
           id: 'ungrouped',
-          title: 'Unfiled Tabs',
+          title: 'Ungrouped Tabs',
           color: 'grey',
           collapsed: false
         }, ungroupedTabs, sleepingTabs, activeTabId);

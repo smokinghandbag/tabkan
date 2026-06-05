@@ -22,10 +22,10 @@
       </div>
       <div class="sidebar-scroll-wrapper">
         <div id="centro-card-container" class="sidebar-content">
-          <!-- Unfiled tabs will be rendered here -->
+          <!-- Ungrouped tabs will be rendered here -->
         </div>
-        <div id="task-rollup-container" class="sidebar-content">
-          <!-- Task Roll-Up will be rendered here -->
+        <div id="task-rollup-container" class="sidebar-content rollup-hidden">
+          <!-- Task Roll-Up will be rendered here (starts hidden; shown once a task exists) -->
         </div>
         <div id="bookmarks-card-container" class="sidebar-content">
           <!-- Sleeping (Bookmarks) will be rendered here -->
@@ -204,6 +204,12 @@
         <button id="open-sessions-btn" class="btn btn-primary">
           <i class="ph ph-floppy-disk"></i> Save &amp; Restore
         </button>
+      </div>
+      <div class="setting-item setting-item-stacked">
+        <div class="setting-info">
+          <label class="setting-label">Don't lose your tabs on restart</label>
+          <p class="setting-description">If Chrome isn't set to reopen your tabs, quitting the browser clears every tab and group — and this board with them. Open <strong>Chrome Settings &rarr; On startup</strong> (paste <code class="setting-code">chrome://settings/onStartup</code> into the address bar) and choose <strong>&ldquo;Continue where you left off.&rdquo;</strong> TabKan also keeps a private auto-snapshot and will offer to restore your workspace if Chrome ever reopens empty.</p>
+        </div>
       </div>
     </div>
   </div>

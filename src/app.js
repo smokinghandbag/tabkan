@@ -21,7 +21,7 @@ import {
 } from './dom.js';
 import { renderBookmarksIfDirty, invalidateBookmarkCache } from './bookmarks.js';
 import { hasUnfinishedTasks, getUnfinishedTasks, aggregateAllTasks, renderTaskRollup, renderCollapsedTaskRollup } from './tasks.js';
-import { renderSessions, saveSession, loadSession, importSession } from './sessions.js';
+import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSnapshot, maybeOfferRestore } from './sessions.js';
 
   // Auto-pin this dashboard tab as the first tab
   try {
@@ -788,7 +788,7 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
       });
 
       // Render unfiled tabs into the sidebar
-      const unfiledCard = createCardElement({ id: 'unfiled', title: 'Unfiled Tabs' }, tabsByGroup.unfiled, true);
+      const unfiledCard = createCardElement({ id: 'unfiled', title: 'Ungrouped Tabs' }, tabsByGroup.unfiled, true);
       unfiledTabsContainer.appendChild(unfiledCard);
 
       // Populate collapsed sidebar with favicons
@@ -922,6 +922,11 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
       const aggregatedTasks = await aggregateAllTasks(allTabs);
       await renderTaskRollup(aggregatedTasks);
       await renderCollapsedTaskRollup(aggregatedTasks);
+
+      // Keep a rolling recovery snapshot of the live workspace (debounced inside
+      // sessions.js) so a browser quit without "Continue where you left off"
+      // doesn't lose the user's tab groups. No-ops on an empty workspace.
+      scheduleAutoSnapshot();
 
     } finally {
       isRendering = false; // Release the lock
@@ -2160,6 +2165,11 @@ import { renderSessions, saveSession, loadSession, importSession } from './sessi
     chrome.bookmarks.onMoved.addListener(handleBookmarkChange);
 
     render();
+
+    // If Chrome reopened this window without the user's tabs/groups (e.g. no
+    // "Continue where you left off" + a quit), offer to restore the last
+    // auto-saved workspace snapshot. Silent when there's nothing to recover.
+    maybeOfferRestore();
   };
 
   // --- Tab Bin Drag & Drop Logic ---

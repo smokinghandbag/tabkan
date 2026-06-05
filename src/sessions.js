@@ -437,3 +437,144 @@ export const renderSessions = async () => {
       });
     });
   };
+
+  // --- Crash / quit recovery -------------------------------------------------
+  // Chrome won't let an extension show a custom dialog when the browser closes,
+  // and if the user hasn't enabled "Continue where you left off", quitting wipes
+  // every tab and group. As a safety net we keep ONE rolling snapshot of the live
+  // workspace in chrome.storage.local while the dashboard is open, then offer to
+  // restore it on next open if the window came back empty.
+  const AUTO_SESSION_KEY = 'autoSession';
+  let autoSnapshotTimer = null;
+
+  // Debounced background snapshot. Called from the dashboard's render loop, so it
+  // coalesces bursts of tab/group changes into a single capture a few seconds
+  // after things settle.
+  export const scheduleAutoSnapshot = () => {
+    if (autoSnapshotTimer) clearTimeout(autoSnapshotTimer);
+    autoSnapshotTimer = setTimeout(async () => {
+      autoSnapshotTimer = null;
+      try {
+        const workspace = await captureCurrentWorkspace();
+        // Never clobber a good snapshot with an empty one (e.g. captured mid
+        // session-restore, or on a transient blank window).
+        if (workspace.tabs.length === 0 && workspace.groups.length === 0) return;
+        await chrome.storage.local.set({
+          [AUTO_SESSION_KEY]: { workspace, savedAt: Date.now() }
+        });
+      } catch (e) {
+        // Best-effort: snapshotting must never break a render.
+      }
+    }, 4000);
+  };
+
+  const clearAutoSnapshot = async () => {
+    try { await chrome.storage.local.remove(AUTO_SESSION_KEY); } catch (e) { /* ignore */ }
+  };
+
+  const removeRestoreBanner = () => {
+    const el = document.getElementById('tk-recovery-banner');
+    if (el) el.remove();
+  };
+
+  const showRestoreBanner = (snapshot, savedAt) => {
+    removeRestoreBanner();
+
+    const groupCount = snapshot.groups.length;
+    const tabCount = snapshot.tabs.length;
+    const stats = `${groupCount} group${groupCount === 1 ? '' : 's'} · ${tabCount} tab${tabCount === 1 ? '' : 's'}`;
+    const when = savedAt
+      ? new Date(savedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+      : '';
+
+    const banner = document.createElement('div');
+    banner.id = 'tk-recovery-banner';
+    banner.className = 'tk-recovery-banner';
+
+    const info = document.createElement('div');
+    info.className = 'tk-recovery-info';
+    const icon = document.createElement('i');
+    icon.className = 'ph ph-clock-counter-clockwise tk-recovery-icon';
+    const textWrap = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'tk-recovery-title';
+    title.textContent = 'Restore your previous workspace?';
+    const sub = document.createElement('div');
+    sub.className = 'tk-recovery-sub';
+    sub.textContent = when
+      ? `Chrome reopened without your tabs. Snapshot from ${when} (${stats}).`
+      : `Chrome reopened without your tabs. (${stats}).`;
+    textWrap.appendChild(title);
+    textWrap.appendChild(sub);
+    info.appendChild(icon);
+    info.appendChild(textWrap);
+
+    const actions = document.createElement('div');
+    actions.className = 'tk-recovery-actions';
+
+    const dismissBtn = document.createElement('button');
+    dismissBtn.className = 'btn btn-secondary';
+    dismissBtn.textContent = 'Dismiss';
+
+    const restoreBtn = document.createElement('button');
+    restoreBtn.className = 'btn btn-primary';
+    restoreBtn.innerHTML = '<i class="ph ph-arrow-counter-clockwise"></i> Restore';
+
+    restoreBtn.addEventListener('click', async () => {
+      restoreBtn.disabled = true;
+      dismissBtn.disabled = true;
+      restoreBtn.innerHTML = '<i class="ph ph-circle-notch"></i> Restoring…';
+      try {
+        await restoreWorkspaceToWindow(snapshot, chrome.windows.WINDOW_ID_CURRENT);
+      } catch (e) {
+        console.error('[TabKan] Workspace restore failed:', e);
+      }
+      removeRestoreBanner();
+      // The freshly restored workspace becomes the next snapshot on the next render.
+    });
+
+    dismissBtn.addEventListener('click', async () => {
+      // The user chose a fresh start — drop the snapshot so we don't nag on reload.
+      await clearAutoSnapshot();
+      removeRestoreBanner();
+    });
+
+    actions.appendChild(dismissBtn);
+    actions.appendChild(restoreBtn);
+    banner.appendChild(info);
+    banner.appendChild(actions);
+    document.body.appendChild(banner);
+  };
+
+  // Called once on dashboard init. Shows the restore banner only when there is a
+  // non-empty snapshot AND the current window looks "lost" (Chrome came back with
+  // no groups and at most one real tab) — otherwise it stays silent.
+  export const maybeOfferRestore = async () => {
+    try {
+      const data = await chrome.storage.local.get(AUTO_SESSION_KEY);
+      const auto = data[AUTO_SESSION_KEY];
+      if (!auto || !auto.workspace) return;
+
+      const snap = auto.workspace;
+      const snapHasContent =
+        (snap.tabs && snap.tabs.length > 0) || (snap.groups && snap.groups.length > 0);
+      if (!snapHasContent) return;
+
+      const [tabs, groups] = await Promise.all([
+        chrome.tabs.query({ currentWindow: true }),
+        chrome.tabGroups.query({ windowId: chrome.windows.WINDOW_ID_CURRENT })
+      ]);
+      const dashUrl = chrome.runtime.getURL('fullpage.html');
+      const realTabs = tabs.filter(t => {
+        const u = t.url || '';
+        return u !== dashUrl && !/^chrome:\/\/(newtab|new-tab-page)/i.test(u);
+      });
+
+      const workspaceLost = groups.length === 0 && realTabs.length <= 1;
+      if (!workspaceLost) return;
+
+      showRestoreBanner(snap, auto.savedAt);
+    } catch (e) {
+      // Recovery is best-effort; never block dashboard load.
+    }
+  };
