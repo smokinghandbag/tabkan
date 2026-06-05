@@ -139,6 +139,7 @@ First public, open-source release.
 - Stored-XSS hardening across the dashboard and side panel (all untrusted data
   escaped before rendering); tightened Content Security Policy.
 
+[5.3.0]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.3.0
 [5.2.1]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.2.1
 [5.2]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.2
 [5.1]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.1
