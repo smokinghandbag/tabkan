@@ -598,50 +598,48 @@ body.fullpage-body {
   font-size: 0.875rem;
 }
 
-.tab-bin {
-  margin-top: auto;
-  padding: 0 0 1rem 0;
-  background-color: var(--bin-bg);
-  border: 2px dashed var(--border);
-  border-radius: var(--radius);
+/* Undo toast — shown bottom-left after a tab is closed (replaces the old
+   "Drop to Close" bin). Built in src/app.js. */
+.tk-undo-toast {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 1000;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  min-height: 80px;
-  transition: all 0.3s ease;
-  cursor: pointer;
-  color: var(--muted-foreground);
+  gap: 0.75rem;
+  padding: 0.6rem 0.7rem 0.6rem 1rem;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 14px 40px -14px rgba(0, 0, 0, 0.55);
+  animation: tk-undo-in 0.16s ease-out;
 }
-
-.tab-bin i {
-  font-size: 1.5rem;
-  opacity: 0.6;
-  transition: all 0.3s ease;
+@keyframes tk-undo-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
-.tab-bin span {
+.tk-undo-label {
   font-size: 0.875rem;
-  font-weight: 500;
+  color: var(--card-foreground);
+  white-space: nowrap;
 }
-
-.tab-bin.drag-over {
-  background-color: var(--bin-drag-bg);
-  border-color: var(--bin-drag-border);
-  border-style: solid;
-  transform: scale(1.02);
+.tk-undo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: none;
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
 }
-
-.tab-bin.drag-over i {
-  color: var(--bin-drag-icon);
-  opacity: 1;
-  transform: scale(1.2);
-}
-
-.tab-bin.drag-over span {
-  color: var(--bin-drag-text);
-}
+.tk-undo-btn:hover { background: var(--primary-hover); }
 
 .sidebar.collapsed {
   transform: translateX(-100%);
@@ -686,59 +684,6 @@ body.fullpage-body {
   margin-bottom: 0.5rem;
 }
 
-.collapsed-favicons {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  align-items: center;
-  overflow-y: auto;
-  overflow-x: hidden;
-  width: 100%;
-  padding: 0.25rem;
-}
-
-.collapsed-favicon {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--card-background);
-  border: 1px solid var(--border);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  opacity: 0;
-  transform: translateX(-20px);
-}
-
-.sidebar.collapsed ~ .sidebar-collapsed .collapsed-favicon {
-  animation: slideInFavicon 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-@keyframes slideInFavicon {
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.collapsed-favicon:hover {
-  background-color: var(--accent);
-  border-color: var(--primary);
-  transform: scale(1.1);
-}
-
-.collapsed-favicon img {
-  width: 16px;
-  height: 16px;
-}
-
-.collapsed-favicon .favicon-placeholder {
-  width: 16px;
-  height: 16px;
-  font-size: 12px;
-}
 
 .collapsed-task-rollup {
   width: 100%;
@@ -753,6 +698,24 @@ body.fullpage-body {
   opacity: 0;
   transform: translateY(-10px);
 }
+
+/* Collapsed-sidebar bookmarks indicator (icon + count). */
+.collapsed-bookmarks {
+  width: 100%;
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  cursor: pointer;
+  color: var(--muted-foreground);
+  transition: color 0.2s ease;
+}
+.collapsed-bookmarks:hover { color: var(--primary); }
+.collapsed-bookmarks:empty { display: none; }
+.collapsed-bookmarks-icon { font-size: 1.25rem; line-height: 1; }
+.collapsed-bookmarks-count { font-size: 0.7rem; font-weight: 600; }
 
 .sidebar.collapsed ~ .sidebar-collapsed .collapsed-task-rollup {
   animation: slideInTask 0.3s cubic-bezier(0.4, 0, 0.2, 1) 0.1s forwards;
@@ -802,41 +765,6 @@ body.fullpage-body {
 
 .collapsed-task-stats.has-incomplete {
   color: #f59e0b;
-}
-
-.tab-bin-collapsed {
-  margin-top: auto;
-  padding: 0.5rem 1rem;
-  background-color: var(--bin-bg);
-  border: 2px dashed var(--border);
-  border-radius: var(--radius);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 50px;
-  transition: all 0.3s ease;
-  cursor: pointer;
-  color: var(--muted-foreground);
-}
-
-.tab-bin-collapsed i {
-  font-size: 1.25rem;
-  opacity: 0.6;
-  transition: all 0.3s ease;
-  margin-top:-10px;
-}
-
-.tab-bin-collapsed.drag-over {
-  background-color: var(--bin-drag-bg);
-  border-color: var(--bin-drag-border);
-  border-style: solid;
-  transform: scale(1.05);
-}
-
-.tab-bin-collapsed.drag-over i {
-  color: var(--bin-drag-icon);
-  opacity: 1;
-  transform: scale(1.2);
 }
 
 .content-area {
@@ -1529,9 +1457,15 @@ li {
 .tab-item {
   cursor: default;
   flex-direction: column;
+  /* Centre content vertically so a single-line tile floats with equal space top
+     and bottom within the min-height (taller tiles fill it, so no effect there). */
+  justify-content: center;
   align-items: stretch;
-  justify-content: flex-start;
   gap: 0.55rem;
+  /* Min height so short (single-line) tiles give the hover action menu balanced
+     breathing room. Taller tiles (notes/footer) exceed this and are unaffected. */
+  box-sizing: border-box;
+  min-height: 3.5rem;
 }
 .tab-item:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
 /* Only the interactive sub-zones get a pointer cursor. */
@@ -1543,16 +1477,19 @@ li {
 
 /* Top row: favicon + title; hover actions float top-right so the title can use
    the full width even when they're hidden. */
-.tab-main { display: flex; flex-direction: row; align-items: flex-start; gap: 8px; }
+.tab-main { display: flex; flex-direction: row; align-items: flex-start; gap: 8px; position: relative; }
 .tab-main .favicon { margin-right: 0; margin-top: 1px; flex: 0 0 auto; }
 .tab-main .title { flex: 1; min-width: 0; }
 
 .tab-item .link-actions {
-  position: absolute; top: 0.5rem; right: 0.55rem;
+  /* Anchored to the favicon/title row (.tab-main) and vertically centred on it,
+     so the menu aligns with the title whether the tile is single-line (centred in
+     the min-height) or tall (row at the top). */
+  position: absolute; top: 50%; right: 0; transform: translateY(-50%);
   gap: 0.3rem; padding: 3px; border-radius: 8px;
   background: var(--tile-hover-bg); /* matches the tile hover bg so icons stay legible */
 }
-.tab-item .link-actions .action-button { color: var(--muted-foreground); padding: 0.4rem; border-radius: 6px; }
+.tab-item .link-actions .action-button { color: var(--muted-foreground); padding: 0.4rem; border-radius: 6px; margin-top: 0; }
 .tab-item .link-actions .action-button:hover { background: var(--secondary-hover); }
 .tab-item .link-actions .action-button .ph { font-size: 1.05em; }
 .tab-item:hover .link-actions .action-button { color: var(--card-foreground); }
@@ -1924,40 +1861,6 @@ li .title {
   .etm-notes { min-height: 120px; }
 }
 
-.task-warning-list {
-  background-color: var(--card-background);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1rem;
-  margin: 0.5rem 0;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.task-warning-list ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.task-warning-list li {
-  padding: 0.5rem;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-}
-
-.task-warning-list li:last-child {
-  border-bottom: none;
-}
-
-.task-warning-list li i {
-  color: #f59e0b;
-  margin-top: 0.125rem;
-}
-
 /* Filter styles */
 .filter-container {
   display: flex;
@@ -2048,6 +1951,29 @@ body.dnd-active .card {
   padding: 2px 4px;
   border-radius: 4px;
   transition: background-color 0.2s;
+}
+
+/* Ungrouped column (v5.5.0): non-editable title (not a Chrome group), a distinct
+   tinted background, and the UI's purple as its accent + outline. */
+.card-title-static { padding: 2px 4px; }
+/* Higher specificity than `.fullpage-cards-grid .card` (which sets bg + border)
+   so these win. Purple border/accent only; the background is a muted grey a
+   touch lighter than the other columns (not a purple tint) to set it apart. */
+.fullpage-cards-grid .card.card-ungrouped {
+  --group-color: var(--primary);
+  border-color: var(--primary);
+  background-color: color-mix(in srgb, var(--card-foreground) 5%, var(--card-background));
+}
+/* Tiles in the ungrouped column are darkened so they keep contrast against that
+   column's lighter background (the rest of the board's tiles stay as-is). */
+.fullpage-cards-grid .card.card-ungrouped ul > li {
+  background-color: color-mix(in srgb, black 14%, var(--card-background));
+}
+/* On the ungrouped column, drop the per-icon hover background — against the darker
+   tiles it reads as misaligned; the icon colour change alone signals hover.
+   (Elsewhere the background stays, where the contrast makes it look right.) */
+.fullpage-cards-grid .card.card-ungrouped .link-actions .action-button:hover {
+  background: transparent;
 }
 
 .editable:hover {
@@ -2697,14 +2623,27 @@ body.fullpage-body button {
   margin-bottom: 0.5rem;
   border: 1px dashed var(--border);
   border-radius: var(--radius);
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 0.15rem;
+  padding: 0.85rem 0.5rem;
+  text-align: center;
   color: var(--muted-foreground);
   transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
 }
 .create-card-link:hover {
   background: transparent;
   border-color: var(--primary);
+  color: var(--primary);
+}
+.create-card-link .ccl-title { font-weight: 600; }
+.create-card-link .ccl-hint { font-size: 0.72rem; opacity: 0.7; }
+/* Highlight while a tab is dragged over it. */
+.create-card-link.drop-target {
+  border-style: solid;
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
   color: var(--primary);
 }
 

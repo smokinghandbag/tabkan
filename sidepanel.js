@@ -58,6 +58,86 @@
     }, 150);
   };
 
+  // --- Close tab with undo (mirrors the dashboard) -----------------------
+  let sbUndoStack = [];
+  let sbUndoTimer = null;
+  const SB_UNDO_MS = 6000;
+
+  const removeSbUndoToast = () => {
+    const el = document.getElementById('sb-undo-toast');
+    if (el) el.remove();
+  };
+
+  const renderSbUndoToast = () => {
+    removeSbUndoToast();
+    if (sbUndoStack.length === 0) return;
+    const n = sbUndoStack.length;
+    const toast = document.createElement('div');
+    toast.id = 'sb-undo-toast';
+    toast.className = 'sb-undo-toast';
+    const label = document.createElement('span');
+    label.className = 'sb-undo-label';
+    label.textContent = n === 1 ? 'Tab closed' : `${n} closed`;
+    const btn = document.createElement('button');
+    btn.className = 'sb-undo-btn';
+    btn.innerHTML = '<i class="ph ph-arrow-counter-clockwise"></i> Undo';
+    btn.addEventListener('click', async () => {
+      const snap = sbUndoStack.pop();
+      if (snap) await restoreSbTab(snap);
+      if (sbUndoStack.length === 0) {
+        if (sbUndoTimer) { clearTimeout(sbUndoTimer); sbUndoTimer = null; }
+        removeSbUndoToast();
+      } else {
+        renderSbUndoToast();
+      }
+    });
+    toast.appendChild(label);
+    toast.appendChild(btn);
+    document.body.appendChild(toast);
+  };
+
+  const closeSidebarTab = async (tab) => {
+    let groupInfo = null;
+    if (tab.groupId != null && tab.groupId !== -1) {
+      try {
+        const g = await chrome.tabGroups.get(tab.groupId);
+        groupInfo = { id: g.id, title: g.title, color: g.color, windowId: g.windowId };
+      } catch (e) { /* group may be gone */ }
+    }
+    const snap = { url: tab.url, index: tab.index, pinned: !!tab.pinned, windowId: tab.windowId || currentWindowId, groupInfo };
+    try {
+      await chrome.tabs.remove(tab.id);
+    } catch (e) {
+      console.error('[TabKan Sidebar] could not close tab:', e);
+      return;
+    }
+    sbUndoStack.push(snap);
+    renderSbUndoToast();
+    if (sbUndoTimer) clearTimeout(sbUndoTimer);
+    sbUndoTimer = setTimeout(() => { sbUndoStack = []; removeSbUndoToast(); sbUndoTimer = null; }, SB_UNDO_MS);
+  };
+
+  const restoreSbTab = async (snap) => {
+    try {
+      const created = await chrome.tabs.create({
+        windowId: snap.windowId, url: snap.url, index: snap.index, pinned: snap.pinned, active: false
+      });
+      if (snap.groupInfo) {
+        let liveGid = null;
+        try { await chrome.tabGroups.get(snap.groupInfo.id); liveGid = snap.groupInfo.id; } catch (e) { /* gone */ }
+        if (liveGid != null) {
+          await chrome.tabs.group({ groupId: liveGid, tabIds: [created.id] });
+        } else {
+          const newGid = await chrome.tabs.group({ tabIds: [created.id], createProperties: { windowId: snap.windowId } });
+          try { await chrome.tabGroups.update(newGid, { title: snap.groupInfo.title, color: snap.groupInfo.color }); } catch (e) {}
+        }
+      }
+      renderSidebar();
+    } catch (e) {
+      console.error('[TabKan Sidebar] undo restore failed:', e);
+    }
+  };
+
   // Initialize sidebar
   const initSidebar = async () => {
     // Apply saved theme from synced settings (refreshes the pre-paint guess).
@@ -408,6 +488,18 @@
 
     tabDiv.appendChild(faviconImg);
     tabDiv.appendChild(titleSpan);
+
+    // Close (×) button — closes the tab immediately, with an undo toast.
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'tab-close';
+    closeBtn.title = 'Close tab';
+    closeBtn.setAttribute('aria-label', 'Close tab');
+    closeBtn.innerHTML = '<i class="ph ph-x"></i>';
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeSidebarTab(tab);
+    });
+    tabDiv.appendChild(closeBtn);
 
     // Drag start
     tabDiv.addEventListener('dragstart', (e) => {

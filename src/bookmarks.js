@@ -233,6 +233,24 @@ export const renderBookmarks = async () => {
 
       const totalBookmarks = countAllBookmarks(sidebarSections);
 
+      // Collapsed-sidebar indicator: a bookmark icon + count so the user knows
+      // there are bookmarks in the (currently collapsed) sidebar. Clicking it
+      // expands the sidebar via the expand button.
+      const collapsedBookmarks = document.getElementById('collapsed-bookmarks');
+      if (collapsedBookmarks) {
+        if (totalBookmarks > 0) {
+          collapsedBookmarks.innerHTML = `
+            <div class="collapsed-bookmarks-icon"><i class="ph ph-bookmark-simple"></i></div>
+            <div class="collapsed-bookmarks-count">${totalBookmarks}</div>
+          `;
+          collapsedBookmarks.title = `${totalBookmarks} bookmark${totalBookmarks === 1 ? '' : 's'} — expand sidebar`;
+          collapsedBookmarks.onclick = () => { document.getElementById('sidebar-toggle')?.click(); };
+        } else {
+          collapsedBookmarks.innerHTML = '';
+          collapsedBookmarks.onclick = null;
+        }
+      }
+
       // Render the bookmarks card with collapsible header
       bookmarksCardContainer.innerHTML = `
         <div class="bookmarks-sidebar-card ${isCardCollapsed ? 'collapsed' : ''}">

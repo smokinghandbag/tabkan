@@ -21,9 +21,6 @@
         <button id="sidebar-collapse-btn" class="action-button sidebar-collapse-btn" aria-label="Collapse sidebar"><i class="ph ph-caret-left"></i></button>
       </div>
       <div class="sidebar-scroll-wrapper">
-        <div id="centro-card-container" class="sidebar-content">
-          <!-- Ungrouped tabs will be rendered here -->
-        </div>
         <div id="task-rollup-container" class="sidebar-content rollup-hidden">
           <!-- Task Roll-Up will be rendered here (starts hidden; shown once a task exists) -->
         </div>
@@ -31,21 +28,14 @@
           <!-- Sleeping (Bookmarks) will be rendered here -->
         </div>
       </div>
-      <div id="tab-bin" class="tab-bin">
-        <i class="ph ph-trash"></i>
-        <span>Drop to Close</span>
-      </div>
     </div>
     <div class="sidebar-collapsed">
       <button id="sidebar-toggle" class="action-button sidebar-expand-btn" aria-label="Expand sidebar"><i class="ph ph-caret-right"></i></button>
-      <div id="collapsed-favicons" class="collapsed-favicons">
-        <!-- Favicons will be rendered here when collapsed -->
-      </div>
       <div id="collapsed-task-rollup" class="collapsed-task-rollup">
         <!-- Task summary will be rendered here when collapsed -->
       </div>
-      <div id="tab-bin-collapsed" class="tab-bin-collapsed">
-        <i class="ph ph-trash"></i>
+      <div id="collapsed-bookmarks" class="collapsed-bookmarks">
+        <!-- Bookmarks indicator (icon + count) when collapsed -->
       </div>
     </div>
     <div class="content-area">
@@ -139,15 +129,6 @@
     </div>
   </div>
 
-  <div id="create-card-dialog" class="dialog hidden">
-    <h3 class="dialog-title">Create New Group</h3>
-    <p class="dialog-description">Enter a name for your new group.</p>
-    <label for="new-card-name">Group Name</label>
-    <input type="text" id="new-card-name" class="dialog-input" placeholder="Enter group name...">
-    <div class="dialog-actions">
-      <button id="create-card-confirm" class="btn btn-primary">Create</button>
-    </div>
-  </div>
 
   <div id="edit-note-dialog" class="dialog hidden">
     <h3 class="dialog-title">Edit Note</h3>
@@ -161,19 +142,6 @@
     <div class="dialog-actions">
       <button id="edit-note-cancel" class="btn btn-secondary">Cancel</button>
       <button id="edit-note-confirm" class="btn btn-primary">Save</button>
-    </div>
-  </div>
-
-  <div id="task-warning-dialog" class="dialog hidden">
-    <h3 class="dialog-title"><i class="ph ph-warning"></i> Unfinished Tasks</h3>
-    <p class="dialog-description">This tab has incomplete tasks. What would you like to do?</p>
-    <div id="task-warning-list" class="task-warning-list">
-      <!-- Unfinished tasks will be listed here -->
-    </div>
-    <div class="dialog-actions">
-      <button id="task-warning-cancel" class="btn btn-secondary">Cancel</button>
-      <button id="task-warning-complete" class="btn btn-primary">Mark All Complete</button>
-      <button id="task-warning-close-anyway" class="btn btn-destructive">Close Anyway</button>
     </div>
   </div>
 

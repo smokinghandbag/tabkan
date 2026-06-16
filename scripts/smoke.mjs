@@ -118,6 +118,15 @@ if (errors.length) {
 // Exercise more cross-module paths: search render, sessions dialog, tag manager.
 const fire = (el, type) => el && el.dispatchEvent(new window.Event(type, { bubbles: true }));
 const doc = window.document;
+
+// v5.5.0: ungrouped tabs render as a column in the main grid (checked on the
+// initial, unfiltered render — the fixture has one ungrouped tab, id 11).
+{
+  const ungrouped = doc.querySelector('#cards-container .card[data-card-id="unfiled"]');
+  console.log(`ungrouped column in grid: ${!!ungrouped}`);
+  if (!ungrouped) { console.error('FAIL: ungrouped tabs should render as a grid column'); process.exit(1); }
+}
+
 try {
   const search = doc.getElementById('search-input');
   if (search) { search.value = 'example'; fire(search, 'input'); }
@@ -150,12 +159,13 @@ const sessionsList = doc.querySelector('#sessions-list .empty-sessions, #session
 console.log(`sessions dialog rendered: ${!!sessionsList}`);
 
 // Assert render actually populated the board
+// At this point a search filter ('example') is active, so only matching cards
+// show — just assert the board populated.
 const cards = window.document.querySelectorAll('#cards-container .card, #cards-container .create-card-link');
-const sidebarCard = window.document.querySelectorAll('#centro-card-container .card');
 const bookmarks = window.document.querySelectorAll('#bookmarks-card-container .bookmarks-sidebar-card');
-console.log(`render output: cardsContainer children=${cards.length}, sidebarCard=${sidebarCard.length}, bookmarksCard=${bookmarks.length}`);
-if (cards.length === 0 || sidebarCard.length === 0) {
-  console.error('FAIL: render did not populate expected containers');
+console.log(`render output (filtered): cardsContainer children=${cards.length}, bookmarksCard=${bookmarks.length}`);
+if (cards.length === 0) {
+  console.error('FAIL: render did not populate the board');
   process.exit(1);
 }
 

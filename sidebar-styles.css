@@ -240,3 +240,63 @@ body {
 /* Hide the scrollbar visually but keep scrolling (matches the dashboard). */
 .sidebar-content { scrollbar-width: none; -ms-overflow-style: none; }
 .sidebar-content::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
+/* Close (×) button on each tab row — appears on hover (v5.5.0). */
+.tab-close {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--sp-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.sidebar-tab:hover .tab-close { opacity: 0.65; }
+.tab-close:hover {
+  opacity: 1;
+  color: var(--sp-text);
+  background: var(--sp-elevated);
+}
+.tab-close .ph { font-size: 0.9rem; }
+
+/* Undo toast — bottom of the side panel after a tab is closed (v5.5.0). */
+.sb-undo-toast {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.5rem 0.45rem 0.7rem;
+  background: var(--sp-elevated);
+  border: 1px solid var(--sp-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  font-size: 0.78rem;
+}
+.sb-undo-label { color: var(--sp-text); white-space: nowrap; }
+.sb-undo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--sp-accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.3rem 0.55rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sb-undo-btn .ph { font-size: 0.85rem; }

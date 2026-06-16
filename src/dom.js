@@ -3,7 +3,6 @@
 // module runs (module scripts are deferred).
 
 export const cardsContainer = document.getElementById("cards-container");
-export const unfiledTabsContainer = document.getElementById("centro-card-container");
 export const sidebarScrollWrapper = document.querySelector(".sidebar-scroll-wrapper");
 export const dialogOverlay = document.getElementById("dialog-overlay");
 export const renameDialog = {
@@ -31,18 +30,6 @@ export const deleteDialog = {
 export const warningDialog = {
     element: document.getElementById("warning-dialog"),
     ok: document.getElementById("warning-ok"),
-  };
-export const taskWarningDialog = {
-    element: document.getElementById("task-warning-dialog"),
-    list: document.getElementById("task-warning-list"),
-    cancel: document.getElementById("task-warning-cancel"),
-    complete: document.getElementById("task-warning-complete"),
-    closeAnyway: document.getElementById("task-warning-close-anyway"),
-  };
-export const createCardDialog = {
-    element: document.getElementById("create-card-dialog"),
-    input: document.getElementById("new-card-name"),
-    confirm: document.getElementById("create-card-confirm"),
   };
 export const editNoteDialog = {
     element: document.getElementById("edit-note-dialog"),
@@ -88,8 +75,5 @@ export const searchClearBtn = document.getElementById("search-clear");
 export const sidebar = document.querySelector(".sidebar");
 export const sidebarToggle = document.getElementById("sidebar-toggle");
 export const sidebarCollapseBtn = document.getElementById("sidebar-collapse-btn");
-export const collapsedFavicons = document.getElementById("collapsed-favicons");
-export const tabBin = document.getElementById("tab-bin");
-export const tabBinCollapsed = document.getElementById("tab-bin-collapsed");
 export const bookmarksCardContainer = document.getElementById("bookmarks-card-container");
 export const taskRollupContainer = document.getElementById("task-rollup-container");

@@ -5,6 +5,23 @@ All notable changes to the **TabKan** extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.5.0] — 2026-06-16
+
+### Added
+- **Close a tab in one click.** Every tab card (and side-panel tab) now has a
+  close button; closing shows an **Undo** prompt for a few seconds in case it was
+  a mistake. This replaces the old drag-a-tab-to-"Drop to Close" bin.
+- **Create a group by dragging a tab** onto the **+ New Group** column — no more
+  stray blank "New Tab". Clicking + New Group still works, with a heads-up that
+  Chrome requires one starter tab in a group.
+
+### Changed
+- **Ungrouped tabs now appear as a column on the board** instead of a sidebar
+  list, so you can see and organise unsorted tabs right in the kanban view. It's
+  set apart with a purple outline and a slightly lighter background.
+- When the sidebar is collapsed, a **bookmarks indicator** now shows there are
+  bookmarks to expand to.
+
 ## [5.4.0] — 2026-06-08
 
 ### Added
@@ -165,6 +182,7 @@ First public, open-source release.
 - Stored-XSS hardening across the dashboard and side panel (all untrusted data
   escaped before rendering); tightened Content Security Policy.
 
+[5.5.0]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.5.0
 [5.4.0]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.4.0
 [5.3.0]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.3.0
 [5.2.1]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.2.1

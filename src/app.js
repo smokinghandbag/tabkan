@@ -12,15 +12,15 @@ import {
 } from './utils.js';
 import { state, ui } from './state.js';
 import {
-  cardsContainer, unfiledTabsContainer, sidebarScrollWrapper, dialogOverlay,
-  renameDialog, deleteDialog, warningDialog, taskWarningDialog, createCardDialog,
+  cardsContainer, sidebarScrollWrapper, dialogOverlay,
+  renameDialog, deleteDialog, warningDialog,
   editNoteDialog, settingsDialog, sessionsDialog, saveSessionDialog, loadSessionDialog,
   tagManagerDialog, windowPickerDialog, searchInput, sidebar, sidebarToggle, sidebarCollapseBtn,
-  collapsedFavicons, tabBin, tabBinCollapsed, bookmarksCardContainer, taskRollupContainer,
+  bookmarksCardContainer, taskRollupContainer,
   searchClearBtn,
 } from './dom.js';
 import { renderBookmarksIfDirty, invalidateBookmarkCache } from './bookmarks.js';
-import { hasUnfinishedTasks, getUnfinishedTasks, aggregateAllTasks, renderTaskRollup, renderCollapsedTaskRollup } from './tasks.js';
+import { aggregateAllTasks, renderTaskRollup, renderCollapsedTaskRollup } from './tasks.js';
 import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSnapshot, maybeOfferRestore } from './sessions.js';
 
   // Auto-pin this dashboard tab as the first tab
@@ -85,57 +85,6 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
     try { localStorage.setItem('tabkan-theme', t); } catch { /* ignore */ }
   };
 
-  // Show task warning dialog
-  const showTaskWarningDialog = (tabUrl, tabTitle, onComplete, onCloseAnyway) => {
-    const unfinishedTasks = getUnfinishedTasks(tabUrl);
-
-    // Populate task list
-    taskWarningDialog.list.innerHTML = `
-      <ul>
-        ${unfinishedTasks.map(task => `<li><i class="ph ph-circle"></i><span>${escapeHtml(task.text)}</span></li>`).join('')}
-      </ul>
-    `;
-
-    // Show dialog
-    dialogOverlay.classList.remove("hidden");
-    taskWarningDialog.element.classList.remove("hidden");
-
-    // Set up button handlers (remove any existing listeners)
-    const cancelHandler = () => {
-      hideDialog(taskWarningDialog);
-    };
-
-    const completeHandler = () => {
-      // Mark all tasks as completed
-      if (state.tabMetadata[tabUrl] && state.tabMetadata[tabUrl].todos) {
-        state.tabMetadata[tabUrl].todos.forEach(todo => todo.completed = true);
-        saveData(false); // Don't re-render yet
-      }
-      hideDialog(taskWarningDialog);
-      onComplete();
-    };
-
-    const closeAnywayHandler = () => {
-      hideDialog(taskWarningDialog);
-      onCloseAnyway();
-    };
-
-    // Remove old listeners and add new ones
-    taskWarningDialog.cancel.replaceWith(taskWarningDialog.cancel.cloneNode(true));
-    taskWarningDialog.complete.replaceWith(taskWarningDialog.complete.cloneNode(true));
-    taskWarningDialog.closeAnyway.replaceWith(taskWarningDialog.closeAnyway.cloneNode(true));
-
-    // Re-get references after cloning
-    taskWarningDialog.cancel = document.getElementById("task-warning-cancel");
-    taskWarningDialog.complete = document.getElementById("task-warning-complete");
-    taskWarningDialog.closeAnyway = document.getElementById("task-warning-close-anyway");
-
-    taskWarningDialog.cancel.addEventListener("click", cancelHandler);
-    taskWarningDialog.complete.addEventListener("click", completeHandler);
-    taskWarningDialog.closeAnyway.addEventListener("click", closeAnywayHandler);
-  };
-
-  // Helper function to get sleeping tab data before sleeping
   const toggleSidebar = () => {
     state.sidebarCollapsed = !state.sidebarCollapsed;
     sidebar.classList.toggle("collapsed", state.sidebarCollapsed);
@@ -310,8 +259,6 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
         hideDialog(settingsDialog);
       } else if (!sessionsDialog.element.classList.contains("hidden")) {
         hideDialog(sessionsDialog);
-      } else if (!createCardDialog.element.classList.contains("hidden")) {
-        hideDialog(createCardDialog);
       } else if (!windowPickerDialog.element.classList.contains("hidden")) {
         hideDialog(windowPickerDialog);
       }
@@ -599,9 +546,12 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
     };
   };
 
-  const openDeleteDialog = (title, description, callback) => {
+  const openDeleteDialog = (title, description, callback, confirmLabel = 'Delete', destructive = true) => {
     deleteDialog.title.textContent = title;
     deleteDialog.description.textContent = description;
+    deleteDialog.confirm.textContent = confirmLabel;
+    deleteDialog.confirm.classList.toggle('btn-destructive', destructive);
+    deleteDialog.confirm.classList.toggle('btn-primary', !destructive);
     showDialog(deleteDialog);
     deleteDialog.confirm.onclick = () => {
       callback();
@@ -680,33 +630,6 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
     updateFilterButtonsState();
   };
 
-  // Helper function to render collapsed sidebar favicons
-  const renderCollapsedSidebarFavicons = (unfiledTabs) => {
-    collapsedFavicons.replaceChildren();
-    const faviconFragment = document.createDocumentFragment();
-
-    unfiledTabs.forEach((tab, index) => {
-      const faviconContainer = document.createElement("div");
-      faviconContainer.className = "collapsed-favicon";
-      faviconContainer.style.animationDelay = `${index * 0.03}s`;
-      faviconContainer.title = tab.title;
-
-      const favicon = document.createElement("img");
-      favicon.src = (tab.favIconUrl && /^(https?:|data:)/i.test(tab.favIconUrl))
-        ? tab.favIconUrl
-        : getFaviconUrl(tab.url);
-      favicon.alt = "";
-      faviconContainer.appendChild(favicon);
-
-      faviconContainer.addEventListener("click", () => {
-        chrome.tabs.update(tab.id, { active: true });
-      });
-
-      faviconFragment.appendChild(faviconContainer);
-    });
-
-    collapsedFavicons.appendChild(faviconFragment);
-  };
 
   // Debounced render wrapper
   const debouncedRender = () => {
@@ -764,7 +687,6 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
       });
 
       cardsContainer.replaceChildren();
-      unfiledTabsContainer.replaceChildren();
       updateFilterButtonsState();
 
       // Per-window board: each dashboard shows ONLY its own window's tabs/groups.
@@ -798,14 +720,6 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
         }
       });
 
-      // Render unfiled tabs into the sidebar
-      const unfiledCard = createCardElement({ id: 'unfiled', title: 'Ungrouped Tabs' }, tabsByGroup.unfiled, true);
-      unfiledTabsContainer.appendChild(unfiledCard);
-
-      // Populate collapsed sidebar with favicons
-      const unfiledTabs = tabsByGroup.unfiled || [];
-      renderCollapsedSidebarFavicons(unfiledTabs);
-
       // Render grouped tabs into the main grid, ensuring they are in the correct order
       const groupOrderMap = allGroups.reduce((acc, group) => {
         const tabsInGroup = allTabs.filter(t => t.groupId === group.id);
@@ -827,6 +741,15 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
 
       const isFiltering = !!ui.searchTerm || !ui.activeTagFilters.has('all');
       let visibleTabCount = 0;
+
+      // Ungrouped tabs render as the LAST column of the board (after the
+      // "+ New Group" tile). Computed here so its matches count toward the
+      // empty-state check; the column itself is appended below. Shown only when
+      // ungrouped tabs exist (and, while filtering, only if some match).
+      const unfiledTabs = tabsByGroup.unfiled || [];
+      const unfiledVisible = unfiledTabs.filter(shouldShowItem).length;
+      const showUnfiled = unfiledTabs.length > 0 && (!isFiltering || unfiledVisible > 0);
+      if (showUnfiled) visibleTabCount += isFiltering ? unfiledVisible : unfiledTabs.length;
 
       sortedGroups.forEach((group, index) => {
         const tabs = tabsByGroup[group.id] || [];
@@ -901,11 +824,66 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
         empty.querySelector('.board-empty-clear').addEventListener('click', clearAllFilters);
         cardsContainer.appendChild(empty);
       } else {
+        // "+ New Group" is a DROP TARGET: drag a tab onto it to start a new group
+        // from that tab (then name it inline). Chrome can't hold an empty group, so
+        // groups are seeded from a real tab rather than a blank "New Tab" placeholder.
         const createCardLink = document.createElement("div");
         createCardLink.className = "create-card-link";
-        createCardLink.innerHTML = `+ New Group`;
-        createCardLink.addEventListener("click", openCreateCardDialog);
+        createCardLink.innerHTML = `<span class="ccl-title"><i class="ph ph-plus"></i> New Group</span><span class="ccl-hint">Drag a tab here to start a group, or click to create one</span>`;
+        createCardLink.title = "Drag a tab onto this to group it, or click to create a new group";
+        createCardLink.addEventListener("dragover", (e) => {
+          if (!isDragging) return; // only internal tab drags
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          createCardLink.classList.add('drop-target');
+        });
+        createCardLink.addEventListener("dragleave", () => createCardLink.classList.remove('drop-target'));
+        createCardLink.addEventListener("drop", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          createCardLink.classList.remove('drop-target');
+          document.querySelectorAll('.placeholder').forEach(p => p.remove());
+          const itemType = e.dataTransfer.getData("item-type");
+          const dragData = e.dataTransfer.getData("text/plain");
+          if (itemType === 'tab' && dragData) {
+            try {
+              const { tabId } = JSON.parse(dragData);
+              await createGroupFromTab(parseInt(tabId));
+            } catch (err) { console.error('[TabKan] create group from drop failed:', err); }
+          }
+        });
+        // Clicking (no drag) still creates a group — but Chrome can't make an empty
+        // group, so warn that a starter tab will be opened (a browser restriction).
+        createCardLink.addEventListener("click", () => {
+          openDeleteDialog(
+            "Start a new empty group?",
+            "Chrome can't create a tab group with no tabs, so TabKan will open one new tab to start the group — that's a browser restriction, not a bug. You can rename the group inline, then close or replace that tab once you've added what you want. (Tip: dragging a tab onto “+ New Group” avoids the extra tab.)",
+            () => createEmptyGroup(),
+            "Create group",
+            false
+          );
+        });
         cardsContainer.appendChild(createCardLink);
+
+        // If we just created a group from a dropped tab, focus its title so the
+        // user can name it inline straight away.
+        if (pendingFocusGroupId != null) {
+          const editable = cardsContainer.querySelector(`.editable[data-card-id="${pendingFocusGroupId}"]`);
+          pendingFocusGroupId = null;
+          if (editable) {
+            editable.focus();
+            const range = document.createRange();
+            range.selectNodeContents(editable);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+        }
+
+        // Ungrouped column goes LAST — after the "+ New Group" tile.
+        if (showUnfiled) {
+          cardsContainer.appendChild(createCardElement({ id: 'unfiled', title: 'Ungrouped Tabs', color: null }, unfiledTabs));
+        }
       }
 
       // Restore scroll positions after rendering
@@ -941,6 +919,92 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
 
     } finally {
       isRendering = false; // Release the lock
+    }
+  };
+
+  // --- Close tab with undo --------------------------------------------------
+  // Closing a tab is immediate (no blocking dialog); a transient "Undo" toast
+  // bottom-left lets the user recover an accidental close. Replaces the old
+  // drag-to-"Drop to Close" bin. Notes/tags/to-dos are keyed by URL, so a
+  // restored tab automatically re-associates with its metadata.
+  let undoStack = [];        // closed-tab snapshots, newest last
+  let undoTimer = null;
+  const UNDO_WINDOW_MS = 6000;
+
+  const removeUndoToast = () => {
+    const el = document.getElementById('tk-undo-toast');
+    if (el) el.remove();
+  };
+
+  const renderUndoToast = () => {
+    removeUndoToast();
+    if (undoStack.length === 0) return;
+    const n = undoStack.length;
+    const toast = document.createElement('div');
+    toast.id = 'tk-undo-toast';
+    toast.className = 'tk-undo-toast';
+    const label = document.createElement('span');
+    label.className = 'tk-undo-label';
+    label.textContent = n === 1 ? 'Tab closed' : `${n} tabs closed`;
+    const btn = document.createElement('button');
+    btn.className = 'tk-undo-btn';
+    btn.innerHTML = '<i class="ph ph-arrow-counter-clockwise"></i> Undo';
+    btn.addEventListener('click', async () => {
+      const snap = undoStack.pop();
+      if (snap) await restoreClosedTab(snap);
+      if (undoStack.length === 0) {
+        if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+        removeUndoToast();
+      } else {
+        renderUndoToast();
+      }
+    });
+    toast.appendChild(label);
+    toast.appendChild(btn);
+    document.body.appendChild(toast);
+  };
+
+  const closeTabWithUndo = async (tab) => {
+    // Capture enough to put the tab (and, if needed, its group) back.
+    let groupInfo = null;
+    if (tab.groupId != null && tab.groupId !== -1) {
+      try {
+        const g = await chrome.tabGroups.get(tab.groupId);
+        groupInfo = { id: g.id, title: g.title, color: g.color, windowId: g.windowId };
+      } catch (e) { /* group may be gone */ }
+    }
+    const snap = { url: tab.url, index: tab.index, pinned: !!tab.pinned, windowId: tab.windowId, groupInfo };
+    try {
+      await chrome.tabs.remove(tab.id);
+    } catch (e) {
+      console.error('[TabKan] could not close tab:', e);
+      return;
+    }
+    undoStack.push(snap);
+    renderUndoToast();
+    if (undoTimer) clearTimeout(undoTimer);
+    undoTimer = setTimeout(() => { undoStack = []; removeUndoToast(); undoTimer = null; }, UNDO_WINDOW_MS);
+  };
+
+  const restoreClosedTab = async (snap) => {
+    try {
+      const created = await chrome.tabs.create({
+        windowId: snap.windowId, url: snap.url, index: snap.index, pinned: snap.pinned, active: false
+      });
+      if (snap.groupInfo) {
+        let liveGid = null;
+        try { await chrome.tabGroups.get(snap.groupInfo.id); liveGid = snap.groupInfo.id; } catch (e) { /* group gone */ }
+        if (liveGid != null) {
+          await chrome.tabs.group({ groupId: liveGid, tabIds: [created.id] });
+        } else {
+          // The group was emptied by the close — recreate it with its title/colour.
+          const newGid = await chrome.tabs.group({ tabIds: [created.id], createProperties: { windowId: snap.windowId } });
+          try { await chrome.tabGroups.update(newGid, { title: snap.groupInfo.title, color: snap.groupInfo.color }); } catch (e) {}
+        }
+      }
+      render();
+    } catch (e) {
+      console.error('[TabKan] undo restore failed:', e);
     }
   };
 
@@ -1087,11 +1151,13 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
     const notes = metadata.notes || "";
     const todos = metadata.todos || [];
 
-    // Hover actions: Edit (opens the editor) + Go-to-tab (switches to the tab).
-    // The card body itself is no longer a click target — see the click handler.
+    // Hover actions: Edit (opens the editor), Go-to-tab (switches to the tab),
+    // and Close (removes the tab immediately, with an undo toast). The card body
+    // itself is not a click target — see the click handler.
     const linkActions = `<div class="link-actions">` +
       `<button class="action-button tab-edit" title="Edit tab"><i class="ph ph-pencil-simple"></i></button>` +
-      `<button class="action-button tab-goto" title="Go to tab"><i class="ph ph-arrow-square-out"></i></button></div>`;
+      `<button class="action-button tab-goto" title="Go to tab"><i class="ph ph-arrow-square-out"></i></button>` +
+      `<button class="action-button tab-delete" title="Close tab"><i class="ph ph-trash"></i></button></div>`;
     // Tag chips are clickable filter shortcuts (data-tag drives toggleTagFilter).
     const tagsHTML = tags.length > 0 ? `<div class="tags-container">${tags.map(tag => `<span class="tag" data-tag="${escapeHtml(tag)}" title="Filter by #${escapeHtml(tag)}">${escapeHtml(tag)}</span>`).join('')}</div>` : '';
     // Note preview: full-width, clamped to a few lines with a trailing ellipsis.
@@ -1195,6 +1261,10 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
         await goToTab(tab);
         return;
       }
+      if (e.target.closest('.tab-delete')) {
+        await closeTabWithUndo(tab);
+        return;
+      }
       if (e.target.closest('.notes-container') || e.target.closest('.todos-summary')) {
         openEdit();
         return;
@@ -1246,6 +1316,18 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
           <i class="ph ph-caret-${isSidebarCardCollapsed ? 'right' : 'down'} sidebar-card-toggle"></i>
           <span data-card-id="${group.id}">${escapeHtml(group.title)}</span>
           <span class="card-stats">${totalItems}</span>
+        </div>
+      `;
+    } else if (group.id === 'unfiled') {
+      // Ungrouped column: a real grid column for unsorted tabs, but it's not a
+      // Chrome group — so its title isn't editable and it has no move/delete/
+      // collapse actions. Dropping a tab here ungroups it (handled in the drop
+      // logic, which already treats 'unfiled' as ungroup).
+      cardElement.classList.add('card-ungrouped');
+      cardElement.innerHTML = `
+        <div class="card-header">
+          <span class="card-title-static">${escapeHtml(group.title)}</span>
+          <span class="card-stats card-count">${totalItems}</span>
         </div>
       `;
     } else {
@@ -1558,29 +1640,36 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
     });
 
     if (!isSidebar) {
+      // The ungrouped column has no editable title and no delete action, so guard
+      // both (it's a pseudo-group, not a real Chrome group).
       const cardNameElement = cardElement.querySelector(".card-header .editable");
-      cardNameElement.addEventListener("blur", async () => {
-        const newName = cardNameElement.textContent.trim();
-        if (newName && newName !== group.title) {
-          await chrome.tabGroups.update(group.id, { title: newName });
+      if (cardNameElement) {
+        cardNameElement.addEventListener("blur", async () => {
+          const newName = cardNameElement.textContent.trim();
+          if (newName && newName !== group.title) {
+            await chrome.tabGroups.update(group.id, { title: newName });
+            render();
+          } else {
+            cardNameElement.textContent = group.title;
+          }
+        });
+
+        cardNameElement.addEventListener("keydown", e => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            cardNameElement.blur();
+          }
+        });
+      }
+
+      const deleteCardBtn = cardElement.querySelector(".delete-card");
+      if (deleteCardBtn) {
+        deleteCardBtn.addEventListener("click", () => openDeleteDialog("Delete Group", `This will ungroup all tabs in "${group.title}". The tabs themselves will not be closed.`, async () => {
+          const tabsInGroup = await chrome.tabs.query({ groupId: group.id });
+          await chrome.tabs.ungroup(tabsInGroup.map(t => t.id));
           render();
-        } else {
-          cardNameElement.textContent = group.title;
-        }
-      });
-
-      cardNameElement.addEventListener("keydown", e => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          cardNameElement.blur();
-        }
-      });
-
-      cardElement.querySelector(".delete-card").addEventListener("click", () => openDeleteDialog("Delete Group", `This will ungroup all tabs in "${group.title}". The tabs themselves will not be closed.`, async () => {
-        const tabsInGroup = await chrome.tabs.query({ groupId: group.id });
-        await chrome.tabs.ungroup(tabsInGroup.map(t => t.id));
-        render();
-      }));
+        }));
+      }
 
       // Toggle collapse listener (only for non-sidebar cards)
       const toggleCollapseBtn = cardElement.querySelector(".toggle-collapse");
@@ -1657,42 +1746,43 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
     return cardElement;
   }
 
-  const openCreateCardDialog = () => {
-    createCardDialog.input.value = "";
-    showDialog(createCardDialog);
-    createCardDialog.input.focus();
-  };
-
-  const createCard = async () => {
-    const cardName = createCardDialog.input.value.trim();
-    if (cardName) {
-      try {
-        await withChromeApiProtection(async () => {
-          // Create a new tab in the background without switching to it, forcing it to the end.
-          // Opens browser's default new tab page (chrome://newtab)
-          const newTab = await chrome.tabs.create({
-            active: false,
-            index: 9999
-          });
-          // Create a new group with this tab.
-          const newGroupId = await chrome.tabs.group({ tabIds: [newTab.id] });
-          // Set the desired title for the new group.
-          await chrome.tabGroups.update(newGroupId, { title: cardName });
-        });
-
-        hideDialog(createCardDialog);
-        render();
-      } catch (error) {
-        console.error("Error creating new group:", error);
-        hideDialog(createCardDialog);
-      }
+  // Create a new group seeded from an existing tab (dropped on "+ New Group").
+  // Chrome groups can't be empty, so we group a real tab rather than spawning a
+  // blank "New Tab". pendingFocusGroupId tells the next render to focus the new
+  // group's (inline-editable) title so it can be named immediately.
+  let pendingFocusGroupId = null;
+  const createGroupFromTab = async (tabId) => {
+    try {
+      const newGroupId = await withChromeApiProtection(async () => {
+        const gid = await chrome.tabs.group({ tabIds: [tabId] });
+        // Give it a sensible default title so it's never blank; the next render
+        // focuses + selects it (below) so typing renames it immediately.
+        await chrome.tabGroups.update(gid, { title: 'New group' });
+        return gid;
+      });
+      pendingFocusGroupId = newGroupId;
+      render();
+    } catch (error) {
+      console.error("Error creating new group from tab:", error);
     }
   };
 
-  createCardDialog.confirm.addEventListener("click", createCard);
-  createCardDialog.input.addEventListener("keypress", e => {
-    if (e.key === "Enter") createCard();
-  });
+  // Create a group via the click path (no dragged tab). Chrome requires a tab in
+  // every group, so this opens one starter tab — the user is warned first.
+  const createEmptyGroup = async () => {
+    try {
+      const newGroupId = await withChromeApiProtection(async () => {
+        const newTab = await chrome.tabs.create({ active: false, index: 9999 });
+        const gid = await chrome.tabs.group({ tabIds: [newTab.id] });
+        await chrome.tabGroups.update(gid, { title: 'New group' });
+        return gid;
+      });
+      pendingFocusGroupId = newGroupId;
+      render();
+    } catch (error) {
+      console.error("Error creating new group:", error);
+    }
+  };
 
   // Create bookmark folder dialog
 
@@ -2331,119 +2421,5 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
     // auto-saved workspace snapshot. Silent when there's nothing to recover.
     maybeOfferRestore();
   };
-
-  // --- Tab Bin Drag & Drop Logic ---
-  const setupTabBin = (binElement) => {
-    binElement.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      binElement.classList.add('drag-over');
-    });
-
-    binElement.addEventListener('dragleave', (e) => {
-      binElement.classList.remove('drag-over');
-    });
-
-    binElement.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      binElement.classList.remove('drag-over');
-
-      const dragData = e.dataTransfer.getData("text/plain");
-      const itemType = e.dataTransfer.getData("item-type");
-
-      if (itemType === 'tab' && dragData) {
-        // Parse JSON to get tab ID and URL
-        try {
-          const { tabId } = JSON.parse(dragData);
-          const tab = await chrome.tabs.get(tabId);
-
-          // Check for unfinished tasks
-          if (hasUnfinishedTasks(tab.url)) {
-            showTaskWarningDialog(
-              tab.url,
-              tab.title,
-              // onComplete - mark all complete and close
-              async () => {
-                await chrome.tabs.remove(tabId);
-                render();
-              },
-              // onCloseAnyway - just close
-              async () => {
-                await chrome.tabs.remove(tabId);
-                render();
-              }
-            );
-          } else {
-            // No tasks, close immediately
-            await chrome.tabs.remove(tabId);
-            render();
-          }
-        } catch (error) {
-          console.error('Error closing tab:', error);
-        }
-      } else if (itemType === 'sleeping-tab') {
-        // Handle sleeping tab deletion
-        const sleepingTabUrl = e.dataTransfer.getData("sleeping-tab-url");
-        const sleepingTab = state.sleepingTabs.find(st => st.url === sleepingTabUrl);
-
-        if (sleepingTab) {
-          // Check for unfinished tasks
-          if (hasUnfinishedTasks(sleepingTabUrl)) {
-            showTaskWarningDialog(
-              sleepingTabUrl,
-              sleepingTab.title,
-              // onComplete - mark all complete and delete
-              async () => {
-                try {
-                  await chrome.bookmarks.remove(sleepingTab.bookmarkId);
-                } catch (error) {
-                  console.error('Error deleting bookmark:', error);
-                }
-                state.sleepingTabs = state.sleepingTabs.filter(st => st.url !== sleepingTabUrl);
-                saveData();
-              },
-              // onCloseAnyway - just delete
-              async () => {
-                try {
-                  await chrome.bookmarks.remove(sleepingTab.bookmarkId);
-                } catch (error) {
-                  console.error('Error deleting bookmark:', error);
-                }
-                state.sleepingTabs = state.sleepingTabs.filter(st => st.url !== sleepingTabUrl);
-                saveData();
-              }
-            );
-          } else {
-            // No tasks, delete immediately
-            try {
-              await chrome.bookmarks.remove(sleepingTab.bookmarkId);
-            } catch (error) {
-              console.error('Error deleting bookmark:', error);
-            }
-            state.sleepingTabs = state.sleepingTabs.filter(st => st.url !== sleepingTabUrl);
-            saveData();
-          }
-        }
-      } else if (itemType === 'bookmark' && dragData) {
-        // Handle bookmark deletion. The bookmark id lives inside the JSON `text/plain`
-        // payload set by the bookmark dragstart — there is no separate 'bookmarkId'
-        // dataTransfer key, so the previous getData('bookmarkId') always came back
-        // empty and deletion silently no-oped.
-        try {
-          const { bookmarkId } = JSON.parse(dragData);
-          if (bookmarkId) {
-            await chrome.bookmarks.remove(bookmarkId);
-            render();
-          }
-        } catch (error) {
-          console.error('Error deleting bookmark:', error);
-        }
-      }
-      // Note: bookmark folders are not draggable (no folder dragstart exists), so the
-      // former 'bookmark-folder' branch was dead code and has been removed.
-    });
-  };
-
-  setupTabBin(tabBin);
-  setupTabBin(tabBinCollapsed);
 
   init();
