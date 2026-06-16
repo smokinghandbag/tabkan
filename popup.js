@@ -6,17 +6,21 @@
 let currentWindowId = null;
 chrome.windows.getCurrent().then((w) => { currentWindowId = w.id; }).catch(() => {});
 
-// Open (or focus) the dashboard tab.
+// Open (or focus) the dashboard tab IN THIS WINDOW. Scoping to the current
+// window is what lets each browser window have its own dashboard — previously
+// this matched a dashboard in any window, so opening it from a 2nd window just
+// jumped you back to the first and a second dashboard could never be created.
 const openDashboard = async () => {
   try {
     const url = chrome.runtime.getURL('fullpage.html');
-    const tabs = await chrome.tabs.query({ url });
+    const win = await chrome.windows.getCurrent();
+    const tabs = await chrome.tabs.query({ url, windowId: win.id });
     if (tabs.length > 0) {
       await chrome.tabs.update(tabs[0].id, { active: true, pinned: true });
       await chrome.tabs.move(tabs[0].id, { index: 0 });
-      await chrome.windows.update(tabs[0].windowId, { focused: true });
+      await chrome.windows.update(win.id, { focused: true });
     } else {
-      await chrome.tabs.create({ url, pinned: true, index: 0 });
+      await chrome.tabs.create({ url, pinned: true, index: 0, windowId: win.id });
     }
   } catch (error) {
     console.error('[TabKan] Error opening dashboard:', error);

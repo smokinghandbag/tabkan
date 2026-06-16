@@ -15,7 +15,7 @@ import {
   cardsContainer, unfiledTabsContainer, sidebarScrollWrapper, dialogOverlay,
   renameDialog, deleteDialog, warningDialog, taskWarningDialog, createCardDialog,
   editNoteDialog, settingsDialog, sessionsDialog, saveSessionDialog, loadSessionDialog,
-  tagManagerDialog, searchInput, sidebar, sidebarToggle, sidebarCollapseBtn,
+  tagManagerDialog, windowPickerDialog, searchInput, sidebar, sidebarToggle, sidebarCollapseBtn,
   collapsedFavicons, tabBin, tabBinCollapsed, bookmarksCardContainer, taskRollupContainer,
   searchClearBtn,
 } from './dom.js';
@@ -312,10 +312,15 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
         hideDialog(sessionsDialog);
       } else if (!createCardDialog.element.classList.contains("hidden")) {
         hideDialog(createCardDialog);
+      } else if (!windowPickerDialog.element.classList.contains("hidden")) {
+        hideDialog(windowPickerDialog);
       }
       // Note: Other dialogs may have specific close handlers, keeping them as-is
     }
   });
+
+  // Window picker (Go-to-tab across windows) — cancel just closes it.
+  windowPickerDialog.cancel.addEventListener("click", () => hideDialog(windowPickerDialog));
 
   // Tag chips for the NOTE dialog (legacy style; the Edit Tab modal renders its
   // own chips inline — see openEditDialog).
@@ -762,15 +767,21 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
       unfiledTabsContainer.replaceChildren();
       updateFilterButtonsState();
 
-      // Fetch all data in parallel
+      // Per-window board: each dashboard shows ONLY its own window's tabs/groups.
+      // (A global all-windows query merged every window's groups onto one board,
+      // showing duplicated/merged groups when more than one window was open.) For
+      // the common single-window case this is identical to before; with multiple
+      // windows each gets its own independent board, and the Go-to-tab dialog
+      // handles a tab/URL that happens to be open in more than one window.
       const [allTabs, allGroups] = await Promise.all([
-        chrome.tabs.query({}),
-        chrome.tabGroups.query({})
+        chrome.tabs.query({ currentWindow: true }),
+        chrome.tabGroups.query({ windowId: chrome.windows.WINDOW_ID_CURRENT })
       ]);
 
-      // Find dashboard tab from the already-fetched tabs
+      // Exclude EVERY dashboard tab (there is one per window now that each window
+      // can have its own), not just the first one found — otherwise a second
+      // window's dashboard would render the other window's dashboard as a tile.
       const dashboardUrl = chrome.runtime.getURL("fullpage.html");
-      const dashboardTabId = allTabs.find(tab => tab.url === dashboardUrl)?.id;
 
       const tabsByGroup = allGroups.reduce((acc, group) => {
         acc[group.id] = [];
@@ -778,7 +789,7 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
       }, { 'unfiled': [] });
 
       allTabs.forEach(tab => {
-        if (tab.id === dashboardTabId) return; // Exclude the dashboard itself
+        if (tab.url === dashboardUrl) return; // Exclude all dashboard tabs
         const groupId = tab.groupId > -1 ? tab.groupId : 'unfiled';
         if (tabsByGroup[groupId]) {
           tabsByGroup[groupId].push(tab);
@@ -933,6 +944,131 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
     }
   };
 
+  // --- External (browser) bookmark drop -------------------------------------
+  // Pull a URL out of a drop that originated OUTSIDE the dashboard — e.g. a
+  // bookmark dragged from Chrome's bookmarks bar. Such drags carry no internal
+  // item-type/JSON; they expose the URL via these standard drag types.
+  const extractExternalDropUrl = (dt) => {
+    const candidates = [];
+    try {
+      const uriList = dt.getData('text/uri-list');
+      if (uriList) candidates.push(...uriList.split(/\r?\n/).filter(l => l && !l.startsWith('#')));
+    } catch { /* type unavailable */ }
+    try {
+      const moz = dt.getData('text/x-moz-url'); // "URL\nTitle"
+      if (moz) candidates.push(moz.split(/\r?\n/)[0]);
+    } catch { /* type unavailable */ }
+    try {
+      const plain = dt.getData('text/plain');
+      if (plain) candidates.push(plain.trim());
+    } catch { /* type unavailable */ }
+    for (const c of candidates) {
+      if (/^https?:\/\//i.test(c)) return c.trim();
+    }
+    return null;
+  };
+
+  // Commit a URL dragged in from the browser's bookmarks bar as a real tab in the
+  // target group, then remove the source bookmark — but ONLY when exactly one
+  // bookmark has that URL (the drag exposes no bookmark id, so we match by URL and
+  // refuse to guess when several share it).
+  const commitExternalBookmarkToGroup = async (url, group) => {
+    try {
+      const newTab = await chrome.tabs.create({ url, active: false });
+      if (group.id !== 'unfiled') {
+        try { await chrome.tabs.group({ groupId: parseInt(group.id), tabIds: [newTab.id] }); }
+        catch (e) { console.error('[TabKan] could not group dropped bookmark tab:', e); }
+      }
+
+      const norm = (u) => (u || '').replace(/\/+$/, '');
+      const matches = await chrome.bookmarks.search({ url });
+      const exact = matches.filter(b => b.url && norm(b.url) === norm(url));
+      if (exact.length === 1) {
+        await chrome.bookmarks.remove(exact[0].id);
+      } else if (exact.length > 1) {
+        console.info(`[TabKan] ${exact.length} bookmarks share ${url}; left them in place (won't guess which to remove).`);
+      }
+    } catch (e) {
+      console.error('[TabKan] external bookmark drop failed:', e);
+    }
+    render();
+  };
+
+  // --- Go-to-tab across windows --------------------------------------------
+  // Activate a specific tab and bring its window to the front.
+  const activateTab = async (t) => {
+    try {
+      await chrome.tabs.update(t.id, { active: true });
+      if (t.windowId != null) await chrome.windows.update(t.windowId, { focused: true });
+    } catch (e) {
+      console.error('[TabKan] could not activate tab:', e);
+    }
+  };
+
+  // Go-to-tab handler. The board is a global view across all windows, so the same
+  // URL can be open in more than one window ("mirrored"). If it is, ask which
+  // window to bring it up in; otherwise switch straight to it.
+  const goToTab = async (tab) => {
+    let instances = [tab];
+    try {
+      const all = await chrome.tabs.query({});
+      const matches = all.filter(t => t.url === tab.url);
+      if (matches.length > 0) instances = matches;
+    } catch { /* fall back to the clicked tab */ }
+
+    const windowIds = new Set(instances.map(t => t.windowId));
+    if (windowIds.size <= 1) {
+      // Single window — prefer the exact tab we clicked.
+      await activateTab(instances.find(t => t.id === tab.id) || instances[0]);
+      return;
+    }
+    await showWindowPicker(instances);
+  };
+
+  // Present the "which window?" chooser for a URL open in several windows.
+  const showWindowPicker = async (instances) => {
+    // Stable ordinal labels (Window 1, 2, …) by window id; mark the current one.
+    let order = new Map();
+    let currentWinId = null;
+    try {
+      const wins = await chrome.windows.getAll({ windowTypes: ['normal'] });
+      wins.sort((a, b) => a.id - b.id).forEach((w, i) => order.set(w.id, i + 1));
+      currentWinId = (await chrome.windows.getCurrent()).id;
+    } catch { /* labels degrade gracefully */ }
+
+    // One entry per window (first instance found in each).
+    const byWindow = new Map();
+    for (const t of instances) if (!byWindow.has(t.windowId)) byWindow.set(t.windowId, t);
+
+    windowPickerDialog.list.replaceChildren();
+    [...byWindow.entries()]
+      .sort((a, b) => (order.get(a[0]) || 0) - (order.get(b[0]) || 0))
+      .forEach(([winId, t]) => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-secondary window-pick-btn';
+        const n = order.get(winId);
+        const icon = document.createElement('i');
+        icon.className = 'ph ph-browser';
+        const label = document.createElement('span');
+        label.textContent = n ? `Window ${n}` : 'Window';
+        btn.appendChild(icon);
+        btn.appendChild(label);
+        if (winId === currentWinId) {
+          const sub = document.createElement('span');
+          sub.className = 'window-pick-sub';
+          sub.textContent = 'this window';
+          btn.appendChild(sub);
+        }
+        btn.addEventListener('click', async () => {
+          hideDialog(windowPickerDialog);
+          await activateTab(t);
+        });
+        windowPickerDialog.list.appendChild(btn);
+      });
+
+    showDialog(windowPickerDialog);
+  };
+
   // Create a sleeping tab element
   const createTabElement = (tab, group) => {
     const listItem = document.createElement("li");
@@ -1056,8 +1192,7 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
       }
       if (e.target.closest('.tab-edit')) { openEdit(); return; }
       if (e.target.closest('.tab-goto')) {
-        await chrome.tabs.update(tab.id, { active: true });
-        await chrome.windows.update(tab.windowId, { focused: true });
+        await goToTab(tab);
         return;
       }
       if (e.target.closest('.notes-container') || e.target.closest('.todos-summary')) {
@@ -1319,6 +1454,18 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
               render();
               return;
             }
+          }
+        }
+
+        // External drop: a bookmark dragged in from the browser's bookmarks bar
+        // (no internal item-type). Commit it as a tab in this group and remove the
+        // source bookmark (only when exactly one matches — see helper).
+        if (!itemType) {
+          const externalUrl = extractExternalDropUrl(e.dataTransfer);
+          if (externalUrl) {
+            document.querySelectorAll('.placeholder').forEach(p => p.remove());
+            await commitExternalBookmarkToGroup(externalUrl, group);
+            return;
           }
         }
 

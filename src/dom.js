@@ -78,6 +78,11 @@ export const tagManagerDialog = {
     list: document.getElementById("tag-manager-list"),
     input: document.getElementById("tag-manager-input"),
   };
+export const windowPickerDialog = {
+    element: document.getElementById("window-picker-dialog"),
+    list: document.getElementById("window-picker-list"),
+    cancel: document.getElementById("window-picker-cancel"),
+  };
 export const searchInput = document.getElementById("search-input");
 export const searchClearBtn = document.getElementById("search-clear");
 export const sidebar = document.querySelector(".sidebar");

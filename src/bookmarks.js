@@ -78,18 +78,40 @@ export const renderBookmarks = async () => {
       const rootFolders = processBookmarkNode(bookmarkTree[0], 0);
 
       // rootFolders is an array containing [Bookmarks Bar, Other Bookmarks, Mobile Bookmarks, ...]
-      // We need to extract user folders from within these containers
+      // We promote each container's sub-folders to the top level (the familiar
+      // "Personal / Accounting / …" list). We ALSO gather bookmarks that sit
+      // loose directly in a container (e.g. the ones the browser's ★ button adds
+      // straight to the Bookmarks Bar) into a per-container section — previously
+      // these were dropped entirely, so a freshly-bookmarked page never showed up.
       const topLevelFolders = [];
+      const looseSections = [];
       rootFolders.forEach(rootContainer => {
-        if (rootContainer && rootContainer.children) {
-          // Extract only folders from this root container's children
-          rootContainer.children.forEach(child => {
-            if (child.type === 'folder' && child.data) {
-              topLevelFolders.push(child.data);
-            }
+        if (!rootContainer || !rootContainer.children) return;
+        const looseBookmarks = [];
+        rootContainer.children.forEach(child => {
+          if (child.type === 'folder' && child.data) {
+            topLevelFolders.push(child.data);
+          } else if (child.type === 'bookmark') {
+            looseBookmarks.push(child); // keep the { type:'bookmark', data } shape
+          }
+        });
+        if (looseBookmarks.length > 0) {
+          looseSections.push({
+            id: rootContainer.id,            // stable container id ('1','2',…) → collapse state persists
+            title: rootContainer.title,      // "Bookmarks Bar" / "Other Bookmarks" / …
+            depth: 0,
+            index: rootContainer.index,
+            parentId: rootContainer.parentId,
+            children: looseBookmarks,
+            totalBookmarks: looseBookmarks.length,
+            defaultExpanded: true,           // show loose bookmarks by default (they were invisible before)
           });
         }
       });
+
+      // Loose-bookmark sections first (so newly-starred pages are immediately
+      // visible at the top), then the promoted user folders.
+      const sidebarSections = [...looseSections, ...topLevelFolders];
 
       // Search memoization for performance
       const searchCache = new Map();
@@ -147,8 +169,10 @@ export const renderBookmarks = async () => {
         }
         const saved = state.collapsedCards[folder.id];
         if (saved !== undefined) return !saved; // honour the user's explicit choice
-        // Default with no saved state: top-level folders start collapsed for a
-        // tidier sidebar; nested folders start expanded.
+        // Default with no saved state: loose-bookmark bar sections start expanded
+        // (otherwise a freshly-starred bookmark would still be hidden); top-level
+        // folders start collapsed for a tidier sidebar; nested folders expanded.
+        if (folder.defaultExpanded) return true;
         return depth > 0;
       };
 
@@ -207,7 +231,7 @@ export const renderBookmarks = async () => {
         }, 0);
       };
 
-      const totalBookmarks = countAllBookmarks(topLevelFolders);
+      const totalBookmarks = countAllBookmarks(sidebarSections);
 
       // Render the bookmarks card with collapsible header
       bookmarksCardContainer.innerHTML = `
@@ -221,7 +245,7 @@ export const renderBookmarks = async () => {
             </button>
           </div>
           <div class="bookmarks-card-content">
-            ${renderFolderTree(topLevelFolders)}
+            ${renderFolderTree(sidebarSections)}
           </div>
         </div>
       `;

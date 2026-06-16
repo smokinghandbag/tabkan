@@ -85,14 +85,15 @@
     dashboardBtn.addEventListener('click', async () => {
       try {
         const dashboardUrl = chrome.runtime.getURL('fullpage.html');
-        // Check if dashboard is already open
-        const tabs = await chrome.tabs.query({ url: dashboardUrl });
+        // Scope to THIS window so each window gets its own dashboard (a global
+        // query would just focus another window's dashboard).
+        const tabs = await chrome.tabs.query({ url: dashboardUrl, windowId: currentWindowId });
         if (tabs.length > 0) {
-          // Dashboard is already open, focus it
+          // Dashboard already open in this window — focus it
           await chrome.tabs.update(tabs[0].id, { active: true });
         } else {
-          // Open new dashboard tab
-          await chrome.tabs.create({ url: dashboardUrl });
+          // Open a new dashboard tab in this window
+          await chrome.tabs.create({ url: dashboardUrl, windowId: currentWindowId });
         }
       } catch (error) {
         console.error('[TabKan Sidebar] Error opening dashboard:', error);

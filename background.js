@@ -1,16 +1,21 @@
-// Function to open the dashboard, creating it if it doesn't exist.
-const openOrCreateDashboard = async () => {
+// Open the dashboard, creating it if it doesn't exist — scoped to a specific
+// window so each window gets its OWN dashboard (a global query would just focus
+// the first window's dashboard and never open one in a second window).
+const openOrCreateDashboard = async (windowId) => {
   const dashboardUrl = chrome.runtime.getURL('fullpage.html');
-  // Check if a dashboard tab is already open.
-  const tabs = await chrome.tabs.query({ url: dashboardUrl });
+  const query = { url: dashboardUrl };
+  if (windowId != null) query.windowId = windowId;
+  const tabs = await chrome.tabs.query(query);
   if (tabs.length > 0) {
-    // If it exists, focus it, pin it, and move to first position.
+    // If it exists in this window, focus it, pin it, and move to first position.
     await chrome.tabs.update(tabs[0].id, { active: true, pinned: true });
     await chrome.tabs.move(tabs[0].id, { index: 0 });
     await chrome.windows.update(tabs[0].windowId, { focused: true });
   } else {
-    // Otherwise, create a new dashboard tab, pinned at position 0.
-    await chrome.tabs.create({ url: dashboardUrl, pinned: true, index: 0 });
+    // Otherwise, create a new dashboard tab in this window, pinned at position 0.
+    const createProps = { url: dashboardUrl, pinned: true, index: 0 };
+    if (windowId != null) createProps.windowId = windowId;
+    await chrome.tabs.create(createProps);
   }
 };
 
@@ -34,7 +39,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 // When the context menu item is clicked, open the dashboard.
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === "open-kanban-dashboard") {
-    openOrCreateDashboard();
+    openOrCreateDashboard(tab && tab.windowId);
   }
 });
 
@@ -47,7 +52,9 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
     const tab = await chrome.tabs.get(activeInfo.tabId);
     if (tab && tab.url === dashboardUrl) {
-      const groups = await chrome.tabGroups.query({});
+      // Only collapse groups in the dashboard's OWN window (each window has its
+      // own dashboard now) — not every window's groups.
+      const groups = await chrome.tabGroups.query({ windowId: tab.windowId });
       for (const group of groups) {
         try {
           await chrome.tabGroups.update(group.id, { collapsed: true });
@@ -68,15 +75,14 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 const notifyDashboardToRender = async () => {
   const dashboardUrl = chrome.runtime.getURL('fullpage.html');
   const tabs = await chrome.tabs.query({ url: dashboardUrl });
-  if (tabs.length > 0) {
+  // Notify EVERY open dashboard (one per window), not just the first — otherwise
+  // a second window's dashboard would never re-render on changes.
+  for (const t of tabs) {
     try {
-      await chrome.tabs.sendMessage(tabs[0].id, { action: "render" });
+      await chrome.tabs.sendMessage(t.id, { action: "render" });
     } catch (error) {
-      // Silently ignore connection errors - dashboard will render on load
-      // This happens when the page is loading or if content script isn't ready
-      // Check lastError to clear it
-      const lastError = chrome.runtime.lastError;
-      // No need to log, this is expected behavior
+      // Expected when a dashboard is still loading / not listening yet.
+      const lastError = chrome.runtime.lastError; // read to clear it
     }
   }
 };
@@ -106,6 +112,11 @@ chrome.tabs.onMoved.addListener(async () => {
   debouncedNotifyDashboard();
 });
 
+// A tab moving BETWEEN windows changes the global (all-windows) board, so every
+// open dashboard needs to re-render — not just the one in the affected window.
+chrome.tabs.onAttached.addListener(() => debouncedNotifyDashboard());
+chrome.tabs.onDetached.addListener(() => debouncedNotifyDashboard());
+
 // Debounce render notifications to prevent flashing
 let renderDebounceTimer = null;
 const debouncedNotifyDashboard = () => {
@@ -122,9 +133,9 @@ const debouncedNotifyDashboard = () => {
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   const dashboardUrl = chrome.runtime.getURL('fullpage.html');
 
-  // If the dashboard tab itself is updated and now active, collapse all groups.
+  // When the dashboard finishes loading, collapse the groups in its OWN window.
   if (tab.url === dashboardUrl && changeInfo.status === 'complete') {
-    const groups = await chrome.tabGroups.query({});
+    const groups = await chrome.tabGroups.query({ windowId: tab.windowId });
     for (const group of groups) {
       try {
         await chrome.tabGroups.update(group.id, { collapsed: true });
@@ -146,6 +157,11 @@ chrome.tabGroups.onCreated.addListener(() => {
 });
 
 chrome.tabGroups.onRemoved.addListener(() => {
+  debouncedNotifyDashboard();
+});
+
+// A group being reordered (incl. moved between windows) also changes the board.
+chrome.tabGroups.onMoved.addListener(() => {
   debouncedNotifyDashboard();
 });
 

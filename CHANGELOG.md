@@ -5,6 +5,30 @@ All notable changes to the **TabKan** extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.4.0] — 2026-06-08
+
+### Added
+- **Per-window dashboards.** You can now open a TabKan dashboard in more than one
+  browser window — each window gets its own board showing that window's tabs and
+  groups. (Previously opening it from a second window just refocused the first
+  window's dashboard.)
+- **"Open in which window?" prompt.** When you use Go-to-tab for a page that's open
+  in more than one window, TabKan now asks which window to bring it up in.
+- **Drag bookmarks in from the bookmarks bar.** Drag a bookmark from Chrome's
+  bookmarks bar onto a group to open it there as a tab; the source bookmark is
+  removed (only when exactly one bookmark matches that URL, to avoid removing the
+  wrong one).
+
+### Fixed
+- **Loose bookmarks now appear in the sidebar.** Bookmarks saved directly to the
+  Bookmarks Bar / Other Bookmarks (e.g. via the ⭐ button) were never shown; they
+  now appear under their section heading, and a freshly-saved bookmark shows up
+  right away.
+- **Workspace recovery no longer duplicates your tabs.** After a browser restart,
+  the restore prompt waits for Chrome's own session restore to finish, reconciles
+  against what's already open (matching by URL) instead of creating a second copy,
+  and no longer rewrites your bookmarks.
+
 ## [5.3.0] — 2026-06-05
 
 ### Added
@@ -141,6 +165,7 @@ First public, open-source release.
 - Stored-XSS hardening across the dashboard and side panel (all untrusted data
   escaped before rendering); tightened Content Security Policy.
 
+[5.4.0]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.4.0
 [5.3.0]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.3.0
 [5.2.1]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.2.1
 [5.2]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.2
