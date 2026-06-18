@@ -1,22 +1,20 @@
-// Open the dashboard, creating it if it doesn't exist — scoped to a specific
-// window so each window gets its OWN dashboard (a global query would just focus
-// the first window's dashboard and never open one in a second window).
-const openOrCreateDashboard = async (windowId) => {
+// Single-dashboard model: exactly one "primary" dashboard across the profile (the
+// window hosting the dashboard tab). If a dashboard exists in ANY window, focus it
+// (never create a second). Only create one — in `preferredWindowId` (or the current
+// window) — when none exists; that window becomes primary.
+const openOrCreateDashboard = async (preferredWindowId) => {
   const dashboardUrl = chrome.runtime.getURL('fullpage.html');
-  const query = { url: dashboardUrl };
-  if (windowId != null) query.windowId = windowId;
-  const tabs = await chrome.tabs.query(query);
-  if (tabs.length > 0) {
-    // If it exists in this window, focus it, pin it, and move to first position.
-    await chrome.tabs.update(tabs[0].id, { active: true, pinned: true });
-    await chrome.tabs.move(tabs[0].id, { index: 0 });
-    await chrome.windows.update(tabs[0].windowId, { focused: true });
-  } else {
-    // Otherwise, create a new dashboard tab in this window, pinned at position 0.
-    const createProps = { url: dashboardUrl, pinned: true, index: 0 };
-    if (windowId != null) createProps.windowId = windowId;
-    await chrome.tabs.create(createProps);
+  const existing = await chrome.tabs.query({ url: dashboardUrl });
+  if (existing.length > 0) {
+    const tab = existing[0];
+    await chrome.tabs.update(tab.id, { active: true, pinned: true });
+    await chrome.tabs.move(tab.id, { index: 0 });
+    await chrome.windows.update(tab.windowId, { focused: true });
+    return;
   }
+  const createProps = { url: dashboardUrl, pinned: true, index: 0 };
+  if (preferredWindowId != null) createProps.windowId = preferredWindowId;
+  await chrome.tabs.create(createProps);
 };
 
 // --- Event Listeners ---
@@ -52,8 +50,8 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
     const tab = await chrome.tabs.get(activeInfo.tabId);
     if (tab && tab.url === dashboardUrl) {
-      // Only collapse groups in the dashboard's OWN window (each window has its
-      // own dashboard now) — not every window's groups.
+      // Collapse groups only in the dashboard's own (primary) window — not every
+      // window's groups.
       const groups = await chrome.tabGroups.query({ windowId: tab.windowId });
       for (const group of groups) {
         try {
@@ -75,8 +73,8 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 const notifyDashboardToRender = async () => {
   const dashboardUrl = chrome.runtime.getURL('fullpage.html');
   const tabs = await chrome.tabs.query({ url: dashboardUrl });
-  // Notify EVERY open dashboard (one per window), not just the first — otherwise
-  // a second window's dashboard would never re-render on changes.
+  // Notify the dashboard to re-render. Normally there is one (the primary window's),
+  // but we loop over all matches to also handle any legacy/leftover dashboard tabs.
   for (const t of tabs) {
     try {
       await chrome.tabs.sendMessage(t.id, { action: "render" });
@@ -167,9 +165,17 @@ chrome.tabGroups.onMoved.addListener(() => {
 
 // Combined listener for tab group updates - handles both dashboard render and auto-collapse
 chrome.tabGroups.onUpdated.addListener(async (group) => {
-  // Notify dashboard to render (debounced so an auto-collapse cascade — each
-  // collapse re-fires onUpdated — coalesces into a single render instead of a storm)
-  debouncedNotifyDashboard();
+  // Skip the re-render NOTIFY (only) for the dashboard's OWN group writes
+  // (rename/collapse/color) — it sets tkGroupMutationUntil before such writes.
+  // Auto-collapse below must still run regardless. Mirrors the isEnforcingTabOrder guard.
+  let selfMutation = false;
+  try {
+    const { tkGroupMutationUntil } = await chrome.storage.local.get('tkGroupMutationUntil');
+    selfMutation = typeof tkGroupMutationUntil === 'number' && Date.now() < tkGroupMutationUntil;
+  } catch (e) { /* ignore storage errors — treat as not-self-mutation */ }
+
+  // Notify dashboard to render (debounced so an auto-collapse cascade coalesces).
+  if (!selfMutation) debouncedNotifyDashboard();
 
   // Read settings from storage to ensure the latest value is used
   const { settings } = await chrome.storage.sync.get('settings');

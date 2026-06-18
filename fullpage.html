@@ -21,6 +21,9 @@
         <button id="sidebar-collapse-btn" class="action-button sidebar-collapse-btn" aria-label="Collapse sidebar"><i class="ph ph-caret-left"></i></button>
       </div>
       <div class="sidebar-scroll-wrapper">
+        <div id="window-switcher" class="sidebar-content window-switcher" hidden>
+          <!-- Window switcher tabs rendered here when 2+ windows are open -->
+        </div>
         <div id="task-rollup-container" class="sidebar-content rollup-hidden">
           <!-- Task Roll-Up will be rendered here (starts hidden; shown once a task exists) -->
         </div>
@@ -31,6 +34,9 @@
     </div>
     <div class="sidebar-collapsed">
       <button id="sidebar-toggle" class="action-button sidebar-expand-btn" aria-label="Expand sidebar"><i class="ph ph-caret-right"></i></button>
+      <div id="collapsed-window-switcher" class="collapsed-window-switcher" hidden>
+        <!-- Vertical window chips when collapsed + 2+ windows -->
+      </div>
       <div id="collapsed-task-rollup" class="collapsed-task-rollup">
         <!-- Task summary will be rendered here when collapsed -->
       </div>

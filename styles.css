@@ -2677,54 +2677,48 @@ body.fullpage-body button {
   border-bottom-color: transparent;
 }
 
-/* --- Workspace recovery banner -------------------------------------------- */
-/* Shown on dashboard load when Chrome reopened without the user's tabs and an
-   auto-saved snapshot is available to restore. Built in src/sessions.js. */
-.tk-recovery-banner {
-  position: fixed;
-  left: 50%;
-  bottom: 24px;
-  transform: translateX(-50%);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-  max-width: min(720px, calc(100vw - 32px));
-  padding: 0.85rem 1.1rem;
-  background: var(--elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 18px 48px -16px rgba(0, 0, 0, 0.55);
-  animation: tk-recovery-in 0.18s ease-out;
+/* --- Window switcher (multi-window) ------------------------------------- */
+.window-switcher { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.window-switcher .ws-heading {
+  font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted-foreground); padding: 0 2px;
 }
-@keyframes tk-recovery-in {
-  from { opacity: 0; transform: translate(-50%, 8px); }
-  to   { opacity: 1; transform: translate(-50%, 0); }
+.ws-tabs { display: flex; gap: 4px; background: var(--muted); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 3px; }
+.ws-tab {
+  flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 6px 8px; border: none; background: transparent; border-radius: calc(var(--radius) - 4px);
+  color: var(--muted-foreground); font: inherit; font-size: 0.8rem; font-weight: 500;
+  cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.tk-recovery-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  min-width: 0;
+.ws-tab:hover { color: var(--card-foreground); background: var(--hover-faint); }
+.ws-tab.active { background: var(--primary); color: var(--primary-foreground); }
+.ws-tab .ws-label { overflow: hidden; text-overflow: ellipsis; }
+.ws-tab .ws-lock { font-size: 0.85em; flex-shrink: 0; opacity: 0.9; }
+.collapsed-window-switcher { display: flex; flex-direction: column; gap: 5px; align-items: center;
+  margin-bottom: 10px; }
+.collapsed-window-switcher .ws-chip {
+  width: 34px; height: 34px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border: 1px solid var(--border); background: var(--muted); border-radius: calc(var(--radius) - 4px);
+  color: var(--muted-foreground); font-size: 0.8rem; font-weight: 600; cursor: pointer;
 }
-.tk-recovery-icon {
-  font-size: 1.5rem;
-  color: var(--primary);
-  flex-shrink: 0;
-}
-.tk-recovery-title {
-  font-weight: 600;
-  font-size: 0.95rem;
-  color: var(--card-foreground);
-}
-.tk-recovery-sub {
-  font-size: 0.82rem;
-  color: var(--muted-foreground);
-  margin-top: 0.1rem;
-}
-.tk-recovery-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
+.collapsed-window-switcher .ws-chip:hover { color: var(--card-foreground); }
+.collapsed-window-switcher .ws-chip.active { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+.collapsed-window-switcher .ws-chip .ws-lock { font-size: 0.6rem; line-height: 1; }
+
+/* --- Closed sessions in the window switcher ----------------------------- */
+.ws-closed { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.ws-closed-row { display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 6px 8px;
+  background: var(--muted); border: 1px solid var(--border); border-radius: calc(var(--radius) - 4px); }
+.ws-closed-head { display: flex; align-items: flex-start; gap: 8px; }
+.ws-closed-label { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.ws-closed-name { font-size: 0.78rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-closed-stats { font-size: 0.68rem; color: var(--muted-foreground); }
+.ws-closed-open { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 6px 9px; font-size: 0.72rem; font-weight: 500; border-radius: calc(var(--radius) - 5px);
+  border: 1px solid var(--tile-hover-border); background: transparent; color: var(--card-foreground); cursor: pointer; }
+.ws-closed-open:hover { background: var(--hover-faint); }
+.ws-closed-dismiss { flex-shrink: 0; width: 24px; height: 24px; display: inline-flex; align-items: center;
+  justify-content: center; border: none; background: transparent; color: var(--muted-foreground);
+  border-radius: 6px; cursor: pointer; }
+.ws-closed-dismiss:hover { color: var(--card-foreground); background: var(--hover-faint); }

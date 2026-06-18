@@ -4,6 +4,7 @@ import { state, ui } from './state.js';
 import { escapeHtml } from './utils.js';
 import { sessionsDialog, loadSessionDialog } from './dom.js';
 import { saveData, showDialog, hideDialog } from './app.js';
+import { captureAllWindowSnapshots, bindRestoredWindow, loadRegistry, referencedGroupIds, isSnapshotAlreadyOpen } from './workspaces.js';
 
   // --- Session Management Functions ---
   let sessions = [];
@@ -439,12 +440,6 @@ export const renderSessions = async () => {
   };
 
   // --- Crash / quit recovery -------------------------------------------------
-  // Chrome won't let an extension show a custom dialog when the browser closes,
-  // and if the user hasn't enabled "Continue where you left off", quitting wipes
-  // every tab and group. As a safety net we keep ONE rolling snapshot of the live
-  // workspace in chrome.storage.local while the dashboard is open, then offer to
-  // restore it on next open if the window came back empty.
-  const AUTO_SESSION_KEY = 'autoSession';
   let autoSnapshotTimer = null;
 
   // Debounced background snapshot. Called from the dashboard's render loop, so it
@@ -455,59 +450,83 @@ export const renderSessions = async () => {
     autoSnapshotTimer = setTimeout(async () => {
       autoSnapshotTimer = null;
       try {
-        const workspace = await captureCurrentWorkspace();
-        // Never clobber a good snapshot with an empty one (e.g. captured mid
-        // session-restore, or on a transient blank window).
-        if (workspace.tabs.length === 0 && workspace.groups.length === 0) return;
-        await chrome.storage.local.set({
-          [AUTO_SESSION_KEY]: { workspace, savedAt: Date.now() }
-        });
+        const dash = await chrome.windows.getCurrent();
+        await captureAllWindowSnapshots(dash && dash.id);
       } catch (e) {
-        // Best-effort: snapshotting must never break a render.
+        // best-effort: snapshotting must never break a render
       }
     }, 4000);
   };
 
-  const clearAutoSnapshot = async () => {
-    try { await chrome.storage.local.remove(AUTO_SESSION_KEY); } catch (e) { /* ignore */ }
-  };
+  // Restore a stored session into its OWN window. The switcher's closed-session
+  // cards are the single restore UI (no separate startup dialog any more).
+  //
+  // Guards against duplicating a session that is already on screen: if a live
+  // window already holds most of the snapshot's URLs (e.g. Chrome restored it on
+  // launch), we re-bind that window to this entry and focus it instead of opening
+  // a second copy — which is what produced the "everything doubled" bug. Otherwise
+  // we open a fresh window anchored to the first reachable tab and restore into it.
+  export const restoreSessionToNewWindow = async (tkId) => {
+    const reg = await loadRegistry();
+    const entry = (reg.windows || []).find(w => w.tkId === tkId);
+    if (!entry || !entry.lastSnapshot) return false;
+    const snapTabs = entry.lastSnapshot.tabs || [];
+    const snapUrls = snapTabs.map(t => t && t.url).filter(Boolean);
 
-  const removeRestoreBanner = () => {
-    const el = document.getElementById('tk-recovery-banner');
-    if (el) el.remove();
-  };
+    // Suppress the dashboard's auto-follow for a moment: opening (or focusing) the
+    // session window makes it the OS-focused window, which would otherwise switch
+    // the dashboard's board to show that session — making it look like the session
+    // also "opened" in the primary/dashboard window. Honoured by the
+    // windows.onFocusChanged listener in app.js. The user can still click the
+    // window's switcher tab to view it deliberately.
+    try { await chrome.storage.local.set({ tkAutoFollowSuppressUntil: Date.now() + 3000 }); } catch (e) { /* best-effort */ }
 
-  // Wait for the window to stop changing before we judge it "lost". When Chrome
-  // is set to "Continue where you left off" it restores tabs ASYNCHRONOUSLY over
-  // a second or two; deciding too early sees an empty window, offers a restore,
-  // and then Chrome's own restore lands on top → duplicates. We poll until the
-  // tab count holds steady for two consecutive checks (or a hard timeout).
-  const waitForWindowToSettle = async () => {
-    let last = -1;
-    for (let i = 0; i < 15; i++) { // ~6s ceiling
-      let count;
-      try { count = (await chrome.tabs.query({ currentWindow: true })).length; }
-      catch { return; }
-      if (count === last) return; // stable
-      last = count;
-      await new Promise(r => setTimeout(r, 400));
-    }
-  };
+    // Already open somewhere? Adopt that window rather than duplicate it — but ONLY
+    // an UNBOUND window (one Chrome restored that re-association hasn't claimed yet).
+    // A window already bound to another entry (e.g. the primary/dashboard window)
+    // must never be adopted: incidental URL overlap would otherwise re-bind this
+    // session onto it, clobber that entry, open no new window, and drop the card.
+    const boundElsewhere = new Set(
+      (reg.windows || []).filter(w => w.tkId !== tkId && w.liveWindowId != null).map(w => w.liveWindowId)
+    );
+    try {
+      const liveTabs = await chrome.tabs.query({});
+      const byWin = new Map();
+      for (const t of liveTabs) {
+        if (!t.url) continue;
+        if (!byWin.has(t.windowId)) byWin.set(t.windowId, new Set());
+        byWin.get(t.windowId).add(t.url);
+      }
+      for (const [winId, urls] of byWin) {
+        if (winId === entry.liveWindowId || boundElsewhere.has(winId)) continue;
+        if (isSnapshotAlreadyOpen(snapUrls, [urls])) {
+          await bindRestoredWindow(tkId, winId);
+          try { await chrome.windows.update(winId, { focused: true }); } catch (e) { /* best-effort */ }
+          return true;
+        }
+      }
+    } catch (e) { /* fall through to a fresh window */ }
 
-  // "Lost" = Chrome reopened this window without the workspace: no groups and at
-  // most one real (non-dashboard, non-new-tab) tab. Used both before showing the
-  // banner AND re-checked at click time (Chrome may have restored in between).
-  const windowLooksLost = async () => {
-    const dashUrl = chrome.runtime.getURL('fullpage.html');
-    const [tabs, groups] = await Promise.all([
-      chrome.tabs.query({ currentWindow: true }),
-      chrome.tabGroups.query({ windowId: chrome.windows.WINDOW_ID_CURRENT })
-    ]);
-    const realTabs = tabs.filter(t => {
-      const u = t.url || '';
-      return u !== dashUrl && !/^chrome:\/\/(newtab|new-tab-page)/i.test(u);
-    });
-    return groups.length === 0 && realTabs.length <= 1;
+    // Anchor the new window to the first reachable (http/https) tab so it opens
+    // reliably with real content. That window-create tab is a disposable SEED: we
+    // restore every snapshot tab as a fresh, stable tab (excludeTabIds keeps the
+    // seed out of the by-URL claim), then drop the seed last — guarded so the
+    // window is never momentarily empty. Operating on the seed directly while it's
+    // still committing can make Chrome discard it and close a single-tab window.
+    const anchorUrl = (snapTabs.find(t => t && t.url && /^https?:\/\//i.test(t.url)) || {}).url;
+    const win = await chrome.windows.create(anchorUrl ? { url: anchorUrl, focused: true } : { focused: true });
+    const seedIds = (win.tabs || []).map(t => t.id);
+    await restoreSnapshotToWindow(entry.lastSnapshot, win.id, { excludeTabIds: seedIds });
+    await bindRestoredWindow(tkId, win.id);
+    // Drop the seed tab(s) now that the real restored tabs exist — but only if
+    // doing so won't empty (and thus close) the window.
+    try {
+      const after = await chrome.tabs.query({ windowId: win.id });
+      if (after.length > seedIds.length) {
+        for (const id of seedIds) { try { await chrome.tabs.remove(id); } catch (e) { /* gone */ } }
+      }
+    } catch (e) { /* best-effort */ }
+    return true;
   };
 
   // Recovery restore — deliberately leaner and safer than loadSession's
@@ -517,15 +536,20 @@ export const renderSessions = async () => {
   //   • Tabs + groups ONLY — it does NOT touch bookmarks or overwrite tabMetadata
   //     (the live copies in storage are already the latest; restoreWorkspaceToWindow
   //     would have wiped and rewritten all bookmarks, which is wrong for recovery).
-  const restoreRecoverySnapshot = async (workspace) => {
-    const windowId = chrome.windows.WINDOW_ID_CURRENT;
+  //   • opts.excludeTabIds: tab ids that must NOT be claimed/reused — used for the
+  //     fresh window's volatile create-tab (the "seed"). Operating on that
+  //     still-committing tab (group/ungroup/move) can make Chrome discard it, and
+  //     a single-tab window then closes; instead we rebuild every snapshot tab as
+  //     a fresh, stable tab and let the caller drop the seed afterwards.
+export const restoreSnapshotToWindow = async (workspace, windowId = chrome.windows.WINDOW_ID_CURRENT, opts = {}) => {
     const dashUrl = chrome.runtime.getURL('fullpage.html');
+    const excludeTabIds = new Set(opts.excludeTabIds || []);
 
     // Index already-open tabs by URL so we can claim rather than duplicate.
-    const existing = await chrome.tabs.query({ windowId });
     const claimable = new Map(); // url -> [tabId, …]
+    const existing = await chrome.tabs.query({ windowId });
     for (const t of existing) {
-      if (t.url === dashUrl) continue;
+      if (t.url === dashUrl || excludeTabIds.has(t.id)) continue;
       if (!claimable.has(t.url)) claimable.set(t.url, []);
       claimable.get(t.url).push(t.id);
     }
@@ -538,7 +562,9 @@ export const renderSessions = async () => {
     // tab (removed once real tabs are in) so the group survives until populated.
     const groupIdMap = new Map();
     const tempTabIds = [];
+    const usedGroupIds = referencedGroupIds(workspace.tabs);
     for (const g of (workspace.groups || [])) {
+      if (!usedGroupIds.has(g.id)) continue;
       try {
         const temp = await chrome.tabs.create({ windowId, active: false, url: 'about:blank' });
         const newGroupId = await chrome.tabs.group({ tabIds: [temp.id] });
@@ -567,108 +593,4 @@ export const renderSessions = async () => {
 
     // Remove the temporary group-seed tabs (groups now hold real tabs).
     for (const id of tempTabIds) { try { await chrome.tabs.remove(id); } catch { /* gone */ } }
-  };
-
-  const showRestoreBanner = (snapshot, savedAt) => {
-    removeRestoreBanner();
-
-    const groupCount = snapshot.groups.length;
-    const tabCount = snapshot.tabs.length;
-    const stats = `${groupCount} group${groupCount === 1 ? '' : 's'} · ${tabCount} tab${tabCount === 1 ? '' : 's'}`;
-    const when = savedAt
-      ? new Date(savedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
-      : '';
-
-    const banner = document.createElement('div');
-    banner.id = 'tk-recovery-banner';
-    banner.className = 'tk-recovery-banner';
-
-    const info = document.createElement('div');
-    info.className = 'tk-recovery-info';
-    const icon = document.createElement('i');
-    icon.className = 'ph ph-clock-counter-clockwise tk-recovery-icon';
-    const textWrap = document.createElement('div');
-    const title = document.createElement('div');
-    title.className = 'tk-recovery-title';
-    title.textContent = 'Restore your previous workspace?';
-    const sub = document.createElement('div');
-    sub.className = 'tk-recovery-sub';
-    sub.textContent = when
-      ? `Chrome reopened without your tabs. Snapshot from ${when} (${stats}).`
-      : `Chrome reopened without your tabs. (${stats}).`;
-    textWrap.appendChild(title);
-    textWrap.appendChild(sub);
-    info.appendChild(icon);
-    info.appendChild(textWrap);
-
-    const actions = document.createElement('div');
-    actions.className = 'tk-recovery-actions';
-
-    const dismissBtn = document.createElement('button');
-    dismissBtn.className = 'btn btn-secondary';
-    dismissBtn.textContent = 'Dismiss';
-
-    const restoreBtn = document.createElement('button');
-    restoreBtn.className = 'btn btn-primary';
-    restoreBtn.innerHTML = '<i class="ph ph-arrow-counter-clockwise"></i> Restore';
-
-    restoreBtn.addEventListener('click', async () => {
-      restoreBtn.disabled = true;
-      dismissBtn.disabled = true;
-      restoreBtn.innerHTML = '<i class="ph ph-circle-notch"></i> Restoring…';
-      try {
-        // Re-check at click time: Chrome may have finished restoring the session
-        // between the banner appearing and the click. If the window is no longer
-        // empty, Chrome already handled it — don't restore on top (that's what
-        // produced duplicates). Just clear the snapshot and dismiss.
-        if (!(await windowLooksLost())) {
-          await clearAutoSnapshot();
-        } else {
-          await restoreRecoverySnapshot(snapshot);
-        }
-      } catch (e) {
-        console.error('[TabKan] Workspace restore failed:', e);
-      }
-      removeRestoreBanner();
-      // The freshly restored workspace becomes the next snapshot on the next render.
-    });
-
-    dismissBtn.addEventListener('click', async () => {
-      // The user chose a fresh start — drop the snapshot so we don't nag on reload.
-      await clearAutoSnapshot();
-      removeRestoreBanner();
-    });
-
-    actions.appendChild(dismissBtn);
-    actions.appendChild(restoreBtn);
-    banner.appendChild(info);
-    banner.appendChild(actions);
-    document.body.appendChild(banner);
-  };
-
-  // Called once on dashboard init. Shows the restore banner only when there is a
-  // non-empty snapshot AND the current window looks "lost" (Chrome came back with
-  // no groups and at most one real tab) — otherwise it stays silent.
-  export const maybeOfferRestore = async () => {
-    try {
-      const data = await chrome.storage.local.get(AUTO_SESSION_KEY);
-      const auto = data[AUTO_SESSION_KEY];
-      if (!auto || !auto.workspace) return;
-
-      const snap = auto.workspace;
-      const snapHasContent =
-        (snap.tabs && snap.tabs.length > 0) || (snap.groups && snap.groups.length > 0);
-      if (!snapHasContent) return;
-
-      // Let Chrome's own session restore finish before deciding — otherwise we
-      // race it and end up duplicating everything.
-      await waitForWindowToSettle();
-
-      // Only offer if the window genuinely came back empty (Chrome didn't restore).
-      if (!(await windowLooksLost())) return;
-
-      showRestoreBanner(snap, auto.savedAt);
-    } catch (e) {
-      // Recovery is best-effort; never block dashboard load.
-    }
   };

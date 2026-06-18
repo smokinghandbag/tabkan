@@ -9,6 +9,7 @@ import {
   FOLDER_INDENT_REM, BOOKMARK_INDENT_REM, FOLDER_HEADER_BASE_REM, DRAG_HANDLE_OFFSET_PX,
   CHROME_GROUP_COLORS, movedLikeDrag,
   normalizeTag, todoProgress, suggestTags, splitMatch,
+  formatSavedAt,
 } from './utils.js';
 import { state, ui } from './state.js';
 import {
@@ -21,7 +22,8 @@ import {
 } from './dom.js';
 import { renderBookmarksIfDirty, invalidateBookmarkCache } from './bookmarks.js';
 import { aggregateAllTasks, renderTaskRollup, renderCollapsedTaskRollup } from './tasks.js';
-import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSnapshot, maybeOfferRestore } from './sessions.js';
+import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSnapshot, restoreSessionToNewWindow } from './sessions.js';
+import { getFocusedWindowId, getRenderContext, setFocusedWindow, toggleFocusLock, renameWindow, applyAutoFollow, forgetSnapshots } from './workspaces.js';
 
   // Auto-pin this dashboard tab as the first tab
   try {
@@ -38,6 +40,8 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
 
 
   let isRendering = false; // Rendering lock
+  let isEditingGroupTitle = false; // true while a group title is being edited inline
+  let isEditingWindowLabel = false; // true while a window label is being renamed inline
   let isDragging = false; // Track drag operations
   // Pointer-down origin, used to tell a real click from the end of a drag.
   // A tile click handler consults wasDragGesture() before acting.
@@ -153,6 +157,23 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
         debouncedRender();
       }
     }
+  });
+
+  // Auto-follow: when the user activates another browser window (and focus isn't
+  // locked), switch the dashboard's focused workspace to it. onFocusChanged fires
+  // with WINDOW_ID_NONE when Chrome loses focus entirely — ignore that.
+  chrome.windows.onFocusChanged.addListener(async (windowId) => {
+    if (windowId == null || windowId === chrome.windows.WINDOW_ID_NONE) return;
+    try {
+      // Skip auto-follow briefly after WE programmatically open/focus a session
+      // window (restoreSessionToNewWindow sets this), so the dashboard stays on the
+      // window the user is actually managing instead of jumping to the new one.
+      const { tkAutoFollowSuppressUntil } = await chrome.storage.local.get('tkAutoFollowSuppressUntil');
+      if (typeof tkAutoFollowSuppressUntil === 'number' && Date.now() < tkAutoFollowSuppressUntil) return;
+      const dash = await chrome.windows.getCurrent();
+      await applyAutoFollow(windowId, dash && dash.id);
+      render();
+    } catch (e) { /* ignore */ }
   });
 
   // Detect if extension context is invalidated and reload the page
@@ -648,6 +669,163 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
     }, RENDER_DEBOUNCE_MS);
   };
 
+  // Render the window switcher into both sidebar containers from the view model.
+  // Shows open-window tabs when 2+ windows are open; shows closed sessions when
+  // present (persistent "open in new window" + dismiss). Collapsed rail chips only
+  // when 2+ open windows. Click a non-focused tab → switch focus (+ lock); click
+  // the focused tab → toggle the lock (auto-follow on/off); double-click a label → rename.
+  const renderWindowSwitcher = (switcher) => {
+    const expanded = document.getElementById('window-switcher');
+    const collapsed = document.getElementById('collapsed-window-switcher');
+    if (!expanded || !collapsed) return;
+    if (!switcher || !switcher.visible) {
+      expanded.hidden = true; collapsed.hidden = true;
+      expanded.replaceChildren(); collapsed.replaceChildren();
+      return;
+    }
+    if (isEditingWindowLabel) return; // don't tear down a label mid-edit
+    expanded.hidden = false;
+    const lockIcon = '<i class="ph ph-lock-simple ws-lock" title="Focus locked — click to auto-follow"></i>';
+
+    const children = [];
+    const head = document.createElement('div');
+    head.className = 'ws-heading';
+    head.textContent = 'Windows';
+    children.push(head);
+
+    // Open-window tabs (only meaningful with 2+ open windows)
+    if (switcher.windows.length >= 2) {
+      const tabsEl = document.createElement('div');
+      tabsEl.className = 'ws-tabs';
+      switcher.windows.forEach(w => {
+        const tab = document.createElement('button');
+        tab.type = 'button';
+        tab.className = 'ws-tab' + (w.isFocused ? ' active' : '');
+        tab.dataset.tkId = w.tkId;
+        const label = document.createElement('span');
+        label.className = 'ws-label';
+        label.textContent = w.displayLabel || w.label;
+        tab.appendChild(label);
+        if (w.isFocused && switcher.locked) tab.insertAdjacentHTML('beforeend', lockIcon);
+        tab.addEventListener('click', () => onSwitcherClick(w.tkId, w.isFocused));
+        label.addEventListener('dblclick', (e) => { e.stopPropagation(); beginRenameWindow(label, w.tkId); });
+        tabsEl.appendChild(tab);
+      });
+      children.push(tabsEl);
+    }
+
+    // Closed sessions: restore into a new window (persistent), or dismiss.
+    if (switcher.closedSessions && switcher.closedSessions.length) {
+      const wrap = document.createElement('div');
+      wrap.className = 'ws-closed';
+      switcher.closedSessions.forEach(s => {
+        const row = document.createElement('div');
+        row.className = 'ws-closed-row';
+        const lbl = document.createElement('div');
+        lbl.className = 'ws-closed-label';
+        lbl.innerHTML = '<span class="ws-closed-name"></span><span class="ws-closed-stats"></span>';
+        lbl.querySelector('.ws-closed-name').textContent = formatSavedAt(s.savedAt) || s.label;
+        lbl.querySelector('.ws-closed-stats').textContent =
+          `${s.groupCount} group${s.groupCount === 1 ? '' : 's'} · ${s.tabCount} tab${s.tabCount === 1 ? '' : 's'}`;
+        const open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'ws-closed-open';
+        open.innerHTML = '<i class="ph ph-arrow-square-out"></i> Open in new window';
+        open.addEventListener('click', () => onOpenClosedSession(s.tkId));
+        const dismiss = document.createElement('button');
+        dismiss.type = 'button';
+        dismiss.className = 'ws-closed-dismiss';
+        dismiss.setAttribute('aria-label', 'Dismiss saved session');
+        dismiss.innerHTML = '<i class="ph ph-x"></i>';
+        dismiss.addEventListener('click', () => onDismissClosedSession(s.tkId));
+        // Stack vertically: [name/stats … ×] on top, full-width action below — the
+        // sidebar is narrow, so a single horizontal row truncates badly.
+        const headRow = document.createElement('div');
+        headRow.className = 'ws-closed-head';
+        headRow.append(lbl, dismiss);
+        row.append(headRow, open);
+        wrap.appendChild(row);
+      });
+      children.push(wrap);
+    }
+    expanded.replaceChildren(...children);
+
+    // Collapsed rail: open-window chips, only when there are 2+ windows to switch.
+    if (switcher.windows.length >= 2) {
+      collapsed.hidden = false;
+      const chips = switcher.windows.map((w, i) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'ws-chip' + (w.isFocused ? ' active' : '');
+        chip.dataset.tkId = w.tkId;
+        chip.title = w.displayLabel || w.label;
+        chip.textContent = String(i + 1);
+        if (w.isFocused && switcher.locked) chip.insertAdjacentHTML('beforeend', lockIcon);
+        chip.addEventListener('click', () => onSwitcherClick(w.tkId, w.isFocused));
+        return chip;
+      });
+      collapsed.replaceChildren(...chips);
+    } else {
+      collapsed.hidden = true;
+      collapsed.replaceChildren();
+    }
+  };
+
+  const onOpenClosedSession = async (tkId) => { await restoreSessionToNewWindow(tkId); render(); };
+  const onDismissClosedSession = async (tkId) => { await forgetSnapshots([tkId]); render(); };
+
+  const onSwitcherClick = async (tkId, isFocused) => {
+    if (isFocused) { await toggleFocusLock(); } else { await setFocusedWindow(tkId); }
+    render();
+  };
+
+  const beginRenameWindow = (labelEl, tkId) => {
+    isEditingWindowLabel = true;
+    labelEl.contentEditable = 'true';
+    labelEl.focus();
+    const sel = window.getSelection();
+    if (sel && sel.selectAllChildren) sel.selectAllChildren(labelEl);
+    const original = labelEl.textContent;
+    let done = false;
+    const finish = async (commit) => {
+      if (done) return; // guard double-fire (blur after Enter)
+      done = true;
+      labelEl.contentEditable = 'false';
+      isEditingWindowLabel = false;
+      const name = labelEl.textContent.trim();
+      if (commit && name && name !== original) {
+        await renameWindow(tkId, name);
+      } else {
+        labelEl.textContent = original;
+      }
+      render();
+    };
+    labelEl.addEventListener('blur', () => finish(true), { once: true });
+    labelEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); labelEl.blur(); }
+      else if (e.key === 'Escape') { e.preventDefault(); labelEl.textContent = original; labelEl.blur(); }
+    });
+  };
+
+  // Set a short suppression window so the background ignores the re-render that our
+  // OWN group write (rename/collapse/color) would otherwise trigger via
+  // tabGroups.onUpdated. Honoured by the tabGroups.onUpdated guard in background.js
+  // (which inlines the equivalent of isWithinSuppressionWindow from utils.js).
+  const SUPPRESS_GROUP_NOTIFY_MS = 1200;
+  const suppressGroupNotify = async () => {
+    try {
+      await chrome.storage.local.set({ tkGroupMutationUntil: Date.now() + SUPPRESS_GROUP_NOTIFY_MS });
+    } catch (e) { /* best-effort */ }
+  };
+
+  // Resolve the window the dashboard is currently managing: the focused window, or
+  // the dashboard's own window by default. Used by render and every window-scoped
+  // mutation so they all act on the same window.
+  const resolveTargetWindowId = async () => {
+    const w = await chrome.windows.getCurrent();
+    return getFocusedWindowId(w && w.id);
+  };
+
   const render = async () => {
     if (isRendering) {
       log('🔄 Render already in progress, queueing...');
@@ -657,6 +835,8 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
       }
       return;
     }
+    // Never tear down a group title that is being edited — defer until the edit ends.
+    if (isEditingGroupTitle) { pendingRender = true; return; }
     if (ui.isWakingTab) {
       log('⏸️  RENDER BLOCKED: ui.isWakingTab = true');
       trace('  Call stack:');
@@ -667,8 +847,11 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
     isRendering = true;
 
     try {
+      const dashWin = await chrome.windows.getCurrent();
+      const { focusedWindowId, switcher } = await getRenderContext(dashWin && dashWin.id);
+
       await withChromeApiProtection(async () => {
-        await enforceTabOrder();
+        await enforceTabOrder(focusedWindowId);
       });
 
       // Save scroll positions before clearing
@@ -695,9 +878,12 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
       // the common single-window case this is identical to before; with multiple
       // windows each gets its own independent board, and the Go-to-tab dialog
       // handles a tab/URL that happens to be open in more than one window.
+      // focusedWindowId resolved once above (before enforceTabOrder) and reused here.
+
+      // Per-window board: query only this window's tabs/groups.
       const [allTabs, allGroups] = await Promise.all([
-        chrome.tabs.query({ currentWindow: true }),
-        chrome.tabGroups.query({ windowId: chrome.windows.WINDOW_ID_CURRENT })
+        chrome.tabs.query({ windowId: focusedWindowId }),
+        chrome.tabGroups.query({ windowId: focusedWindowId })
       ]);
 
       // Exclude EVERY dashboard tab (there is one per window now that each window
@@ -911,6 +1097,7 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
       const aggregatedTasks = await aggregateAllTasks(allTabs);
       await renderTaskRollup(aggregatedTasks);
       await renderCollapsedTaskRollup(aggregatedTasks);
+      renderWindowSwitcher(switcher);
 
       // Keep a rolling recovery snapshot of the live workspace (debounced inside
       // sessions.js) so a browser quit without "Continue where you left off"
@@ -1644,21 +1831,31 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
       // both (it's a pseudo-group, not a real Chrome group).
       const cardNameElement = cardElement.querySelector(".card-header .editable");
       if (cardNameElement) {
+        cardNameElement.addEventListener("focus", () => { isEditingGroupTitle = true; });
         cardNameElement.addEventListener("blur", async () => {
+          isEditingGroupTitle = false;
+          if (cardNameElement.dataset.committing) return; // re-entrancy guard (teardown blur)
           const newName = cardNameElement.textContent.trim();
           if (newName && newName !== group.title) {
-            await chrome.tabGroups.update(group.id, { title: newName });
-            render();
+            cardNameElement.dataset.committing = '1';
+            await suppressGroupNotify();
+            try {
+              await chrome.tabGroups.update(group.id, { title: newName });
+              group.title = newName;                 // keep closure + card in sync
+              cardNameElement.textContent = newName; // in place — no full render()
+            } catch (e) {
+              console.error('[TabKan] group rename failed:', e);
+              cardNameElement.textContent = group.title;
+            }
+            delete cardNameElement.dataset.committing;
+            if (pendingRender) render();             // flush any render deferred during the edit
           } else {
             cardNameElement.textContent = group.title;
           }
         });
 
         cardNameElement.addEventListener("keydown", e => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            cardNameElement.blur();
-          }
+          if (e.key === "Enter") { e.preventDefault(); cardNameElement.blur(); }
         });
       }
 
@@ -1754,9 +1951,10 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
   const createGroupFromTab = async (tabId) => {
     try {
       const newGroupId = await withChromeApiProtection(async () => {
-        const gid = await chrome.tabs.group({ tabIds: [tabId] });
+        const gid = await chrome.tabs.group({ tabIds: [tabId], createProperties: { windowId: await resolveTargetWindowId() } });
         // Give it a sensible default title so it's never blank; the next render
         // focuses + selects it (below) so typing renames it immediately.
+        await suppressGroupNotify();
         await chrome.tabGroups.update(gid, { title: 'New group' });
         return gid;
       });
@@ -1772,8 +1970,10 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
   const createEmptyGroup = async () => {
     try {
       const newGroupId = await withChromeApiProtection(async () => {
-        const newTab = await chrome.tabs.create({ active: false, index: 9999 });
-        const gid = await chrome.tabs.group({ tabIds: [newTab.id] });
+        const targetWin = await resolveTargetWindowId();
+        const newTab = await chrome.tabs.create({ active: false, index: 9999, windowId: targetWin });
+        const gid = await chrome.tabs.group({ tabIds: [newTab.id], createProperties: { windowId: targetWin } });
+        await suppressGroupNotify();
         await chrome.tabGroups.update(gid, { title: 'New group' });
         return gid;
       });
@@ -1830,7 +2030,7 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
   let allCardsCollapsed = false;
 
   toggleAllCardsBtn.addEventListener("click", async () => {
-    const allGroups = await chrome.tabGroups.query({ windowId: chrome.windows.WINDOW_ID_CURRENT });
+    const allGroups = await chrome.tabGroups.query({ windowId: await resolveTargetWindowId() });
     const allCards = document.querySelectorAll('.card[data-card-id]');
 
     if (allCardsCollapsed) {
@@ -2149,7 +2349,7 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
     return { ungrouped, needsReordering };
   };
 
-  const enforceTabOrder = async () => {
+  const enforceTabOrder = async (focusedWindowId) => {
     // Skip if the user is dragging, or a previous enforcement is still running
     // (overlapping runs would let one run's finally{} clear the storage flag
     // while another is mid-move, re-triggering the background render loop).
@@ -2157,10 +2357,13 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
       return;
     }
 
+    // Resolve the target window if not passed in (e.g. when called outside render).
+    if (focusedWindowId == null) focusedWindowId = await resolveTargetWindowId();
+
     // Read-only pre-check. If nothing needs moving (the common case on
     // metadata/search/filter renders) we return WITHOUT writing the storage
     // flag — previously every render did two storage writes regardless.
-    const allTabs = await chrome.tabs.query({ currentWindow: true });
+    const allTabs = await chrome.tabs.query({ windowId: focusedWindowId });
     const dashboardTab = allTabs.find(t => t.url === chrome.runtime.getURL("fullpage.html"));
     const dashboardNeedsMove = dashboardTab && dashboardTab.index !== 0;
     const { needsReordering } = computeUngrouped(allTabs, dashboardTab);
@@ -2179,7 +2382,7 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
       // 1. Pin the dashboard tab to the first position.
       if (dashboardNeedsMove) {
         await chrome.tabs.move(dashboardTab.id, { index: 0 });
-        tabs = await chrome.tabs.query({ currentWindow: true }); // indices changed
+        tabs = await chrome.tabs.query({ windowId: focusedWindowId }); // indices changed
       }
 
       // 2. Move all ungrouped tabs to the end (recomputed on current indices).
@@ -2415,11 +2618,6 @@ import { renderSessions, saveSession, loadSession, importSession, scheduleAutoSn
     chrome.bookmarks.onMoved.addListener(handleBookmarkChange);
 
     render();
-
-    // If Chrome reopened this window without the user's tabs/groups (e.g. no
-    // "Continue where you left off" + a quit), offer to restore the last
-    // auto-saved workspace snapshot. Silent when there's nothing to recover.
-    maybeOfferRestore();
   };
 
   init();

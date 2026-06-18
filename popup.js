@@ -1,4 +1,10 @@
 // Toolbar-icon popup: a small menu with "Dashboard" and "Side Menu".
+// Single-dashboard model: the dashboard lives in one "primary" window. In a
+// secondary window (the dashboard is open elsewhere) we hide the Dashboard option
+// and offer only the side panel.
+import { dashboardPopupMode } from './src/utils.js';
+
+const DASH_URL = chrome.runtime.getURL('fullpage.html');
 
 // Prefetch the current window id at load (no gesture needed) so the side-panel
 // open call can run synchronously inside the click handler — chrome.sidePanel.open
@@ -6,21 +12,35 @@
 let currentWindowId = null;
 chrome.windows.getCurrent().then((w) => { currentWindowId = w.id; }).catch(() => {});
 
-// Open (or focus) the dashboard tab IN THIS WINDOW. Scoping to the current
-// window is what lets each browser window have its own dashboard — previously
-// this matched a dashboard in any window, so opening it from a 2nd window just
-// jumped you back to the first and a second dashboard could never be created.
+// Hide the Dashboard option when the dashboard lives in ANOTHER window (this is a
+// secondary window → side panel only). On any error, leave the default (shown).
+(async () => {
+  try {
+    const [win, tabs] = await Promise.all([
+      chrome.windows.getCurrent(),
+      chrome.tabs.query({ url: DASH_URL }),
+    ]);
+    if (dashboardPopupMode(tabs[0] || null, win.id) === 'secondary') {
+      const btn = document.getElementById('open-dashboard');
+      if (btn) btn.style.display = 'none';
+    }
+  } catch (e) { /* leave default */ }
+})();
+
+// Focus the single dashboard wherever it is, or create it in this window (which
+// then becomes primary). In a primary window the existing dashboard is in THIS
+// window, so this focuses it.
 const openDashboard = async () => {
   try {
-    const url = chrome.runtime.getURL('fullpage.html');
-    const win = await chrome.windows.getCurrent();
-    const tabs = await chrome.tabs.query({ url, windowId: win.id });
-    if (tabs.length > 0) {
-      await chrome.tabs.update(tabs[0].id, { active: true, pinned: true });
-      await chrome.tabs.move(tabs[0].id, { index: 0 });
-      await chrome.windows.update(win.id, { focused: true });
+    const existing = await chrome.tabs.query({ url: DASH_URL });
+    if (existing.length > 0) {
+      const tab = existing[0];
+      await chrome.tabs.update(tab.id, { active: true, pinned: true });
+      await chrome.tabs.move(tab.id, { index: 0 });
+      await chrome.windows.update(tab.windowId, { focused: true });
     } else {
-      await chrome.tabs.create({ url, pinned: true, index: 0, windowId: win.id });
+      const win = await chrome.windows.getCurrent();
+      await chrome.tabs.create({ url: DASH_URL, pinned: true, index: 0, windowId: win.id });
     }
   } catch (error) {
     console.error('[TabKan] Error opening dashboard:', error);

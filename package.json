@@ -1,16 +1,17 @@
 {
   "name": "tabkan",
-  "version": "5.5.0",
+  "version": "5.6.0",
   "private": true,
   "description": "Turn Chrome's native tab groups into a visual Kanban board.",
   "author": "Bjorn Byrne (https://www.bjornbyrne.com)",
   "homepage": "https://github.com/smokinghandbag/tabkan",
   "type": "module",
   "scripts": {
-    "check": "for f in background.js sidepanel.js popup.js src/*.js scripts/smoke.mjs scripts/*.test.mjs; do node --check \"$f\" || exit 1; done && node --input-type=commonjs -e \"JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest.json valid')\"",
+    "check": "for f in background.js sidepanel.js popup.js src/*.js scripts/smoke.mjs scripts/restore.battle.mjs scripts/*.test.mjs; do node --check \"$f\" || exit 1; done && node --input-type=commonjs -e \"JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest.json valid')\"",
     "unit": "node --test scripts/*.test.mjs",
     "smoke": "node scripts/smoke.mjs .",
-    "test": "npm run check && npm run unit && npm run smoke",
+    "battle": "node scripts/restore.battle.mjs .",
+    "test": "npm run check && npm run unit && npm run smoke && npm run battle",
     "package": "bash scripts/package.sh"
   },
   "devDependencies": {

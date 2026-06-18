@@ -5,6 +5,35 @@ All notable changes to the **TabKan** extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.6.0] — 2026-06-18
+
+### Added
+- **Reopen a closed window's tabs and groups.** The window switcher lists your saved
+  window sessions; click **Open in new window** to rebuild one in its own window, with
+  its groups and tabs restored (matched by URL so nothing is duplicated — if that
+  session is already open, TabKan just brings it to the front).
+- **Manage every window from one board.** With more than one Chrome window open, the
+  dashboard shows a window switcher in the sidebar — tabs when expanded, compact chips
+  when collapsed — to pick which window's tabs and groups you're managing. It
+  auto-follows the window you're working in; click a tab to lock onto a window, and
+  double-click its name to rename it.
+
+### Changed
+- **One dashboard per profile.** The full-board dashboard now lives in a single
+  "primary" window; opening it from another window focuses that one instead of
+  creating duplicates. Other windows use the side panel (which still works per
+  window) — their toolbar menu shows only the Side Menu option.
+
+### Fixed
+- **"Where did my groups go?" on multiple windows.** Since per-window dashboards
+  (5.4.0), the board shows only the current window's tabs and groups — so if your
+  groups were in another window they looked like they'd vanished after updating.
+  The new window switcher makes every open window's groups reachable in one click,
+  so they're never hidden behind an empty-looking board.
+- **Dashboard no longer refreshes every few seconds while renaming a tab group.**
+  Group renames now update in place and the dashboard ignores the re-render its own
+  group writes would otherwise trigger.
+
 ## [5.5.0] — 2026-06-16
 
 ### Added
@@ -182,6 +211,7 @@ First public, open-source release.
 - Stored-XSS hardening across the dashboard and side panel (all untrusted data
   escaped before rendering); tightened Content Security Policy.
 
+[5.6.0]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.6.0
 [5.5.0]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.5.0
 [5.4.0]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.4.0
 [5.3.0]: https://github.com/smokinghandbag/tabkan/releases/tag/v5.3.0

@@ -102,6 +102,32 @@ export const splitMatch = (name, query) => {
   return [n.slice(0, i), n.slice(i, i + q.length), n.slice(i + q.length)];
 };
 
+// Single-dashboard model: the dashboard lives in ONE "primary" window. Decide what
+// the toolbar popup should offer, given the dashboard tab (if any — from
+// chrome.tabs.query({ url: dashboardUrl }), first match) and the popup's own window:
+//   'create'    → no dashboard exists anywhere → offer "Dashboard" (creates it here;
+//                 this window becomes primary).
+//   'primary'   → the dashboard is in THIS window → offer "Dashboard" (focus it).
+//   'secondary' → the dashboard is in ANOTHER window → do NOT offer it (side panel only).
+export const dashboardPopupMode = (dashboardTab, currentWindowId) => {
+  if (!dashboardTab) return 'create';
+  return dashboardTab.windowId === currentWindowId ? 'primary' : 'secondary';
+};
+
+// Self-mutation suppression: the dashboard sets a short "until" timestamp before
+// its own tab-group writes; the background skips re-render notifications while it
+// is active, so the dashboard's own rename/collapse writes don't bounce back as a
+// render (which would destroy an in-edit title field and self-sustain a loop).
+export const isWithinSuppressionWindow = (untilTs, now) =>
+  typeof untilTs === 'number' && now < untilTs;
+
+// Human-readable timestamp for a saved snapshot, e.g. "18 Jun 2026, 13:55".
+export const formatSavedAt = (ts) => {
+  if (ts == null) return '';
+  try { return new Date(ts).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); }
+  catch { return ''; }
+};
+
 // Debug logging (flip DEBUG to true to trace render/drag flow).
 export const DEBUG = false;
 export const log = (...args) => DEBUG && console.log(...args);

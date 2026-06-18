@@ -18,8 +18,15 @@ const listener = () => ({ addListener() {}, removeListener() {} });
 const tabsData = [
   { id: 10, url: 'https://example.com/', title: 'Example', index: 1, groupId: 1, windowId: 1, favIconUrl: 'https://example.com/f.ico', active: true, pinned: false },
   { id: 11, url: 'https://news.ycombinator.com/', title: 'HN <b>x</b>', index: 2, groupId: -1, windowId: 1, favIconUrl: '', active: false, pinned: false },
+  { id: 12, url: 'https://drive.google.com/', title: 'Drive', index: 1, groupId: 2, windowId: 2, favIconUrl: '', active: true, pinned: false },
 ];
-const groupsData = [{ id: 1, title: 'Work "set" <x>', color: 'blue', collapsed: false, windowId: 1 }];
+const groupsData = [
+  { id: 1, title: 'Work "set" <x>', color: 'blue', collapsed: false, windowId: 1 },
+  // A group living in ANOTHER window (id 2). It has no tabs in this window, so it
+  // never renders as a column on the per-window board; it only feeds the cross-
+  // window summary that drives the "groups in another window" hint.
+  { id: 2, title: 'Other-window group', color: 'green', collapsed: false, windowId: 2 },
+];
 const chrome = {
   runtime: {
     id: 'smoke',
@@ -30,23 +37,49 @@ const chrome = {
   },
   tabs: {
     getCurrent: async () => ({ id: 99, url: 'chrome-extension://smoke/fullpage.html', windowId: 1, index: 0 }),
-    query: async () => tabsData.map(t => ({ ...t })),
+    query: async (q = {}) => {
+      let res = tabsData;
+      if (q && q.windowId != null) res = res.filter(t => t.windowId === q.windowId);
+      else if (q && q.currentWindow) res = res.filter(t => t.windowId === 1);
+      if (q && q.groupId != null) res = res.filter(t => t.groupId === q.groupId);
+      return res.map(t => ({ ...t }));
+    },
     get: async (id) => ({ ...(tabsData.find(t => t.id === id) || tabsData[0]) }),
     update: async (id, props) => { tabsData._updates = tabsData._updates || []; tabsData._updates.push({ id, props }); },
     move: async () => {}, remove: async () => {},
-    group: async () => 1, ungroup: async () => {}, create: async () => ({ id: 500, index: 9 }),
+    group: async (opts) => { chrome.tabs._groupCalls = chrome.tabs._groupCalls || []; chrome.tabs._groupCalls.push(opts); return 1; }, ungroup: async () => {}, create: async () => ({ id: 500, index: 9 }),
     onCreated: listener(), onRemoved: listener(), onUpdated: listener(),
     onMoved: listener(), onActivated: listener(),
   },
   tabGroups: {
     TAB_GROUP_ID_NONE: -1,
-    query: async () => groupsData.map(g => ({ ...g })),
+    // Honour the windowId filter so the per-window board (queries the current
+    // window) and the cross-window hint (queries all windows) behave distinctly.
+    query: async (q = {}) => {
+      chrome.tabGroups._queried = chrome.tabGroups._queried || [];
+      if (q && q.windowId != null) chrome.tabGroups._queried.push(q.windowId);
+      let res = groupsData;
+      if (q && q.windowId != null) {
+        const wid = q.windowId === -2 ? 1 : q.windowId;
+        res = groupsData.filter(g => g.windowId === wid);
+      }
+      return res.map(g => ({ ...g }));
+    },
     update: async () => {}, move: async () => {},
     onCreated: listener(), onRemoved: listener(), onUpdated: listener(),
   },
   storage: {
     sync: { get: async () => ({}), set: async (obj) => { chrome.storage.sync._writes.push(obj); } },
-    local: { get: async () => ({}), set: async () => {} },
+    local: (() => {
+      const store = { tabkanWorkspaces: { windows: [
+        { tkId: 'closed1', label: 'Saved Window', liveWindowId: null, lastSnapshot: { savedAt: 1718000000000, groups: [], tabs: [{ url: 'https://saved.example.org/old' }] } }
+      ], focusedTkId: null, focusLocked: false } };
+      return {
+        get: async (key) => (typeof key === 'string' ? (key in store ? { [key]: store[key] } : {}) : { ...store }),
+        set: async (obj) => { Object.assign(store, obj); },
+        remove: async (key) => { delete store[key]; },
+      };
+    })(),
     onChanged: listener(),
   },
   bookmarks: {
@@ -61,7 +94,7 @@ const chrome = {
     create: async () => ({ id: 'x' }), remove: async () => {}, removeTree: async () => {},
     onCreated: listener(), onRemoved: listener(), onChanged: listener(), onMoved: listener(),
   },
-  windows: { WINDOW_ID_CURRENT: -2, getCurrent: async () => ({ id: 1 }), update: async () => {}, create: async () => ({ id: 2 }) },
+  windows: { WINDOW_ID_CURRENT: -2, WINDOW_ID_NONE: -1, getCurrent: async () => ({ id: 1 }), getAll: async () => ([{ id: 1 }, { id: 2 }]), update: async (id, props) => { chrome.windows._updates = chrome.windows._updates || []; chrome.windows._updates.push({ id, props }); }, create: async () => { chrome.windows._created = (chrome.windows._created || 0) + 1; return { id: 2, tabs: [{ id: 600 }] }; }, onFocusChanged: listener() },
   // (storage.sync._writes initialized below)
   contextMenus: { create() {}, onClicked: listener() },
   sidePanel: { open: async () => {}, setPanelBehavior: async () => {} },
@@ -167,6 +200,36 @@ console.log(`render output (filtered): cardsContainer children=${cards.length}, 
 if (cards.length === 0) {
   console.error('FAIL: render did not populate the board');
   process.exit(1);
+}
+
+// --- Group rename is in-place and does not call full render() -----------
+{
+  const titleEl = doc.querySelector('#cards-container .card[data-card-id="1"] .card-header .editable');
+  if (!titleEl) { console.error('FAIL: no editable group title found'); process.exit(1); }
+  const cardBefore = titleEl.closest('.card');
+  titleEl.textContent = 'Renamed Group';
+  titleEl.dispatchEvent(new window.Event('blur'));
+  await new Promise(r => setTimeout(r, 50));
+  const cardAfter = doc.querySelector('#cards-container .card[data-card-id="1"]');
+  console.log(`rename updates title in place: ${cardAfter && cardAfter.querySelector('.editable').textContent === 'Renamed Group'}`);
+  if (!cardAfter || cardAfter.querySelector('.editable').textContent !== 'Renamed Group') {
+    console.error('FAIL: rename did not update the title in place'); process.exit(1);
+  }
+  if (cardAfter !== cardBefore) { console.error('FAIL: rename rebuilt the card (full render) instead of in-place update'); process.exit(1); }
+}
+
+// --- Focused-window plumbing: render targets the resolved focused window ----
+{
+  const queried = chrome.tabGroups._queried || [];
+  const usedFocused = queried.includes(1);
+  const usedLegacy = queried.includes(-2);
+  console.log(`render queried focused window (1): ${usedFocused}, legacy WINDOW_ID_CURRENT used: ${usedLegacy}`);
+  if (!usedFocused) { console.error('FAIL: render did not query the resolved focused window id'); process.exit(1); }
+  if (usedLegacy) { console.error('FAIL: render still uses WINDOW_ID_CURRENT instead of focusedWindowId'); process.exit(1); }
+  // window-2 content must not leak onto the (focused = window 1) board
+  if (doc.querySelector('#cards-container .card[data-card-id="2"]')) {
+    console.error('FAIL: window-2 group leaked onto the window-1 board'); process.exit(1);
+  }
 }
 
 // --- Block 1: tile click-zone behaviour (v5.1 model) --------------------
@@ -389,6 +452,137 @@ try {
   console.log(`toolbar: combined row (search+actions+tags): ${!!(searchInRow && actions && tagBtnInActions && tagsInRow)}`);
   if (removedSessionsBtn || !sessionsInSettings || !actions || !tagBtnInActions || !tagsInRow || !searchInRow) {
     console.error('FAIL: combined toolbar layout not as expected'); process.exit(1);
+  }
+}
+
+// --- Fix regression: createEmptyGroup targets the focused/resolved window -----
+// Click the "+ New Group" tile to open the confirm dialog, then confirm it.
+// This exercises the createEmptyGroup → resolveTargetWindowId → tabs.group path
+// and ensures tabs.group received createProperties.windowId (the focused window).
+{
+  // Reset board to unfiltered state
+  const searchEl = doc.getElementById('search-input');
+  if (searchEl && searchEl.value) { searchEl.value = ''; fire(searchEl, 'input'); await new Promise(r => setTimeout(r, 450)); }
+
+  const createLink = doc.querySelector('#cards-container .create-card-link');
+  if (!createLink) {
+    console.error('FAIL: .create-card-link not found — cannot exercise createEmptyGroup');
+    process.exit(1);
+  }
+
+  // Record baseline so we can isolate the call made by this exercise
+  const callsBefore = (chrome.tabs._groupCalls || []).length;
+
+  // Click the link → opens the confirm dialog
+  createLink.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 50));
+
+  // Click the confirm button to trigger createEmptyGroup()
+  const confirmBtn = doc.getElementById('delete-confirm');
+  if (!confirmBtn) {
+    console.error('FAIL: #delete-confirm not found after clicking + New Group');
+    process.exit(1);
+  }
+  confirmBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 200));
+
+  const callsAfter = chrome.tabs._groupCalls || [];
+  const newCalls = callsAfter.slice(callsBefore);
+  const createGroupCall = newCalls.find(c => c && c.createProperties && c.createProperties.windowId != null);
+  console.log(`createEmptyGroup passed createProperties.windowId: ${!!createGroupCall}`);
+  if (!createGroupCall) {
+    console.error('FAIL: createEmptyGroup did not pass createProperties.windowId to tabs.group (drag-create path has same regression risk)');
+    process.exit(1);
+  }
+  const gotFocusedWindow = createGroupCall.createProperties.windowId === 1;
+  console.log(`createEmptyGroup targeted focused window (1): ${gotFocusedWindow}`);
+  if (!gotFocusedWindow) {
+    console.error(`FAIL: createEmptyGroup used windowId=${createGroupCall.createProperties.windowId}, expected 1`);
+    process.exit(1);
+  }
+}
+if (errors.length) {
+  console.error(`RUNTIME ERRORS after createEmptyGroup exercise (${errors.length}):`);
+  for (const e of errors.slice(0, 8)) console.error(' -', e && e.stack ? e.stack.split('\n').slice(0,4).join('\n') : e);
+  process.exit(1);
+}
+
+// --- Window switcher: renders with 2 windows; clicking switches focus -------
+// (Placed last: switching focus to window 2 changes the board, so it must not run
+// before the window-1 assertions above.)
+{
+  // The createEmptyGroup exercise above auto-focuses the new group's editable title,
+  // which sets isEditingGroupTitle=true and would block render. Blur it first.
+  const active = doc.activeElement;
+  if (active && active !== doc.body) active.dispatchEvent(new window.Event('blur', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 50));
+
+  const sw = doc.getElementById('window-switcher');
+  const tabs = sw ? sw.querySelectorAll('.ws-tab') : [];
+  console.log(`switcher visible with 2 windows: ${sw && !sw.hidden}, tab count: ${tabs.length}`);
+  if (!sw || sw.hidden) { console.error('FAIL: switcher should be visible with 2 windows'); process.exit(1); }
+  if (tabs.length !== 2) { console.error('FAIL: expected 2 switcher tabs'); process.exit(1); }
+  if (!sw.querySelector('.ws-tab.active')) { console.error('FAIL: no active switcher tab'); process.exit(1); }
+  const other = Array.from(tabs).find(t => !t.classList.contains('active'));
+  other.dispatchEvent(new window.Event('click', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 500));
+  const w2card = doc.querySelector('#cards-container .card[data-card-id="2"]');
+  console.log(`clicking other window switches the board to it: ${!!w2card}`);
+  if (!w2card) { console.error('FAIL: switching focus did not re-render the other window board'); process.exit(1); }
+}
+
+// --- Closed session offered in switcher (persistent open-in-new-window) -----
+{
+  const closedRow = doc.querySelector('#window-switcher .ws-closed-row');
+  const openBtn = closedRow && closedRow.querySelector('.ws-closed-open');
+  console.log(`closed session offered in switcher: ${!!closedRow}, has open-in-new-window: ${!!openBtn}`);
+  if (!closedRow || !openBtn) { console.error('FAIL: closed session should render with an open-in-new-window button'); process.exit(1); }
+  const name = closedRow && closedRow.querySelector('.ws-closed-name');
+  const hasDate = !!(name && /\d/.test(name.textContent));   // date/time contains digits; "Window N"/"Saved Window" labels here would too — fixture label has no digits
+  console.log(`closed-session title is a timestamp: ${hasDate}`);
+  if (!hasDate) { console.error('FAIL: closed-session title should be a date/time stamp'); process.exit(1); }
+  const before = chrome.windows._created || 0;
+  const openBtnRow = closedRow.querySelector('.ws-closed-open');
+  openBtnRow.dispatchEvent(new window.Event('click', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 200));
+  console.log(`open-in-new-window created a window: ${(chrome.windows._created || 0) > before}`);
+  if (!((chrome.windows._created || 0) > before)) { console.error('FAIL: Open in new window did not create a window'); process.exit(1); }
+}
+
+// --- Legacy on-restart restore chooser is fully retired ---------------------
+{
+  const mod = await import(pathToFileURL(`${REPO}/src/sessions.js`).href);
+  const gone = typeof mod.renderRestoreChooser === 'undefined' && typeof mod.maybeOfferRestore === 'undefined';
+  console.log(`legacy restore chooser retired (no export): ${gone}`);
+  if (!gone) { console.error('FAIL: renderRestoreChooser/maybeOfferRestore should no longer exist'); process.exit(1); }
+  const panel = doc.getElementById('tk-restore-chooser');
+  console.log(`no legacy chooser panel in DOM: ${!panel}`);
+  if (panel) { console.error('FAIL: a legacy restore chooser panel is present'); process.exit(1); }
+}
+
+// --- Open-in-new-window ADOPTS an already-open but UNBOUND session -----------
+// A closed session whose URLs are already on screen in a window NOT yet bound to
+// any entry (e.g. Chrome restored it on launch) must re-bind + focus that live
+// window, NOT spawn a second copy. (A window already bound to another entry — like
+// the primary — must NOT be adopted; see restore.battle.mjs scenario F.)
+{
+  const mod = await import(pathToFileURL(`${REPO}/src/sessions.js`).href);
+  // drive.google.com is open in live window 2 (tabsData) and unbound in this clean
+  // registry; point a closed session at it.
+  await chrome.storage.local.set({ tabkanWorkspaces: { focusedTkId: null, focusLocked: false, windows: [
+    { tkId: 'adopt1', label: 'Window 9', liveWindowId: null,
+      lastSnapshot: { savedAt: 1718000000000, groups: [], tabs: [{ url: 'https://drive.google.com/' }] } },
+  ] } });
+  const createdBefore = chrome.windows._created || 0;
+  chrome.windows._updates = [];
+  const ok = await mod.restoreSessionToNewWindow('adopt1');
+  const createdAfter = chrome.windows._created || 0;
+  const focused = (chrome.windows._updates || []).some(u => u.id === 2 && u.props && u.props.focused);
+  const after = (await chrome.storage.local.get('tabkanWorkspaces')).tabkanWorkspaces;
+  const bound = (after.windows.find(w => w.tkId === 'adopt1') || {}).liveWindowId;
+  console.log(`adopt: no new window (${createdAfter === createdBefore}), focused live window (${focused}), rebound to it (${bound === 2})`);
+  if (!(ok && createdAfter === createdBefore && focused && bound === 2)) {
+    console.error('FAIL: open-in-new-window should adopt an already-open session, not duplicate it'); process.exit(1);
   }
 }
 
