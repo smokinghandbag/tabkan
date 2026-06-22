@@ -1,6 +1,6 @@
 {
   "name": "tabkan",
-  "version": "5.6.0",
+  "version": "5.6.1",
   "private": true,
   "description": "Turn Chrome's native tab groups into a visual Kanban board.",
   "author": "Bjorn Byrne (https://www.bjornbyrne.com)",

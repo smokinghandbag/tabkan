@@ -121,6 +121,28 @@ export const dashboardPopupMode = (dashboardTab, currentWindowId) => {
 export const isWithinSuppressionWindow = (untilTs, now) =>
   typeof untilTs === 'number' && now < untilTs;
 
+// Decide which loose tabs need shuffling past the groups so the tab strip order
+// matches the board (groups first, then ungrouped). `allTabs` are one window's tabs.
+//   • ungrouped: the loose tabs to move to the end (sorted by current index).
+//   • needsReordering: true only when a group exists AND some movable loose tab
+//     still sits at/before the last grouped tab.
+// PINNED tabs are excluded: Chrome keeps pinned tabs at the very front and won't let
+// them move past unpinned/grouped tabs, so counting them here made needsReordering
+// permanently true → enforceTabOrder looped forever (the dashboard "refresh every
+// 2-3s" + tab-strip shuffle reported with pinned tabs alongside groups).
+export const computeUngrouped = (allTabs, dashboardTab) => {
+  const ungrouped = (allTabs || [])
+    .filter(tab => tab.groupId === -1 && !tab.pinned && (!dashboardTab || tab.id !== dashboardTab.id))
+    .sort((a, b) => a.index - b.index);
+  const lastGroupedTabIndex = Math.max(
+    ...(allTabs || []).filter(tab => tab.groupId !== -1).map(tab => tab.index),
+    0
+  );
+  const needsReordering = (allTabs || []).some(tab => tab.groupId !== -1) &&
+    ungrouped.some(tab => tab.index <= lastGroupedTabIndex);
+  return { ungrouped, needsReordering };
+};
+
 // Human-readable timestamp for a saved snapshot, e.g. "18 Jun 2026, 13:55".
 export const formatSavedAt = (ts) => {
   if (ts == null) return '';

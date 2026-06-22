@@ -23,10 +23,16 @@ const openOrCreateDashboard = async (preferredWindowId) => {
 // one-time welcome tab that shows how to pin the toolbar icon. Chrome doesn't
 // let an extension pin itself, so this nudges the user to do it.
 chrome.runtime.onInstalled.addListener((details) => {
-  chrome.contextMenus.create({
-    id: "open-kanban-dashboard",
-    title: "Open TabKan",
-    contexts: ["page"] // Show on any page
+  // Recreate the context menu from a clean slate. onInstalled fires on UPDATE too,
+  // and the previous version's "open-kanban-dashboard" item still exists then, so a
+  // bare create() throws "Cannot create item with duplicate id" (a benign but noisy
+  // runtime.lastError). removeAll() clears it first.
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: "open-kanban-dashboard",
+      title: "Open TabKan",
+      contexts: ["page"] // Show on any page
+    });
   });
 
   if (details.reason === "install") {

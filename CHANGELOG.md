@@ -5,6 +5,20 @@ All notable changes to the **TabKan** extension are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.6.1] — 2026-06-22
+
+### Fixed
+- **Dashboard no longer refreshes/reshuffles tabs forever when you have pinned tabs
+  alongside tab groups.** The tab-order tidy-up treated pinned tabs as loose tabs to
+  push past the groups, but Chrome keeps pinned tabs at the front — so it retried
+  every render, bouncing the tab strip every couple of seconds. Pinned tabs are now
+  left where they belong, and the remaining loose tabs are moved in one batch (much
+  faster with a lot of open tabs).
+- **No more "Cannot create item with duplicate id" error after the extension
+  updates.** The right-click **Open TabKan** menu item is now refreshed instead of
+  recreated on update, clearing a harmless-but-noisy error from the extension's
+  error log.
+
 ## [5.6.0] — 2026-06-18
 
 ### Added

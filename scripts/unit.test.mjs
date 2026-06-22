@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   escapeHtml, getFaviconUrl, distanceSq, movedLikeDrag, DRAG_CLICK_THRESHOLD_PX,
   normalizeTag, todoProgress, suggestTags, splitMatch,
-  isWithinSuppressionWindow, dashboardPopupMode,
+  isWithinSuppressionWindow, dashboardPopupMode, computeUngrouped,
 } from '../src/utils.js';
 import { nextWindowLabel, bindWindows, resolveFocusedWindowId } from '../src/workspaces.js';
 import { switcherViewModel, focusWindow, toggleFocusLockState, renameWindowInRegistry, autoFollowWindow } from '../src/workspaces.js';
@@ -21,6 +21,55 @@ test('escapeHtml handles null/undefined as empty string', () => {
   assert.equal(escapeHtml(null), '');
   assert.equal(escapeHtml(undefined), '');
   assert.equal(escapeHtml(0), '0');
+});
+
+// --- computeUngrouped (tab-order enforcement) -------------------------------
+const dash = { id: 99, url: 'x', index: 0 };
+test('computeUngrouped: a PINNED tab before a group does NOT trigger reordering (the refresh-loop bug)', () => {
+  // dashboard(0,pinned) + user pinned tab(1) + group(2..3) + loose(4). The pinned
+  // tab sits before the group but can never move past it — must be ignored, else
+  // needsReordering stays true forever and enforceTabOrder loops.
+  const tabs = [
+    { id: 99, index: 0, groupId: -1, pinned: true },   // dashboard
+    { id: 1, index: 1, groupId: -1, pinned: true },    // user-pinned, before the group
+    { id: 2, index: 2, groupId: 7, pinned: false },
+    { id: 3, index: 3, groupId: 7, pinned: false },
+    { id: 4, index: 4, groupId: -1, pinned: false },   // loose, already after the group
+  ];
+  const { ungrouped, needsReordering } = computeUngrouped(tabs, dash);
+  assert.equal(needsReordering, false);                 // would be TRUE without the pinned filter
+  assert.deepEqual(ungrouped.map(t => t.id), [4]);      // pinned + dashboard excluded
+});
+
+test('computeUngrouped: an UNPINNED loose tab before a group DOES need reordering', () => {
+  const tabs = [
+    { id: 99, index: 0, groupId: -1, pinned: true },   // dashboard
+    { id: 5, index: 1, groupId: -1, pinned: false },   // loose, before the group → must move
+    { id: 2, index: 2, groupId: 7, pinned: false },
+    { id: 3, index: 3, groupId: 7, pinned: false },
+  ];
+  const { ungrouped, needsReordering } = computeUngrouped(tabs, dash);
+  assert.equal(needsReordering, true);
+  assert.deepEqual(ungrouped.map(t => t.id), [5]);
+});
+
+test('computeUngrouped: no groups → never needs reordering (even with early loose tabs)', () => {
+  const tabs = [
+    { id: 99, index: 0, groupId: -1, pinned: true },
+    { id: 5, index: 1, groupId: -1, pinned: false },
+    { id: 6, index: 2, groupId: -1, pinned: false },
+  ];
+  assert.equal(computeUngrouped(tabs, dash).needsReordering, false);
+});
+
+test('computeUngrouped: loose tabs already past the last group → stable (no reorder)', () => {
+  const tabs = [
+    { id: 99, index: 0, groupId: -1, pinned: true },
+    { id: 2, index: 1, groupId: 7, pinned: false },
+    { id: 5, index: 2, groupId: -1, pinned: false },
+    { id: 6, index: 3, groupId: -1, pinned: false },
+  ];
+  assert.equal(computeUngrouped(tabs, dash).needsReordering, false);
 });
 
 test('escapeHtml is injection-safe for a hostile tab title', () => {

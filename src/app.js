@@ -9,7 +9,7 @@ import {
   FOLDER_INDENT_REM, BOOKMARK_INDENT_REM, FOLDER_HEADER_BASE_REM, DRAG_HANDLE_OFFSET_PX,
   CHROME_GROUP_COLORS, movedLikeDrag,
   normalizeTag, todoProgress, suggestTags, splitMatch,
-  formatSavedAt,
+  formatSavedAt, computeUngrouped,
 } from './utils.js';
 import { state, ui } from './state.js';
 import {
@@ -2335,19 +2335,9 @@ import { getFocusedWindowId, getRenderContext, setFocusedWindow, toggleFocusLock
 
   let isEnforcingOrderInFlight = false;
 
-  // Compute whether the ungrouped tabs need to be pushed past the grouped tabs.
-  const computeUngrouped = (allTabs, dashboardTab) => {
-    const ungrouped = allTabs
-      .filter(tab => tab.groupId === -1 && (!dashboardTab || tab.id !== dashboardTab.id))
-      .sort((a, b) => a.index - b.index);
-    const lastGroupedTabIndex = Math.max(
-      ...allTabs.filter(tab => tab.groupId !== -1).map(tab => tab.index),
-      0
-    );
-    const needsReordering = allTabs.some(tab => tab.groupId !== -1) &&
-      ungrouped.some(tab => tab.index <= lastGroupedTabIndex);
-    return { ungrouped, needsReordering };
-  };
+  // computeUngrouped lives in utils.js (pure + unit-tested) — it now excludes
+  // PINNED tabs, which Chrome won't move past groups (that caused an infinite
+  // enforce→onMoved→render loop when pinned tabs sat before a group).
 
   const enforceTabOrder = async (focusedWindowId) => {
     // Skip if the user is dragging, or a previous enforcement is still running
@@ -2365,7 +2355,12 @@ import { getFocusedWindowId, getRenderContext, setFocusedWindow, toggleFocusLock
     // flag — previously every render did two storage writes regardless.
     const allTabs = await chrome.tabs.query({ windowId: focusedWindowId });
     const dashboardTab = allTabs.find(t => t.url === chrome.runtime.getURL("fullpage.html"));
-    const dashboardNeedsMove = dashboardTab && dashboardTab.index !== 0;
+    // Only try to pin the dashboard to index 0 if it can actually GET there: an
+    // unpinned dashboard can't precede the user's pinned tabs (Chrome clamps it),
+    // which would leave index !== 0 forever and loop. Pinned dashboard → fine.
+    const otherPinnedExist = allTabs.some(t => t.pinned && (!dashboardTab || t.id !== dashboardTab.id));
+    const dashboardNeedsMove = dashboardTab && dashboardTab.index !== 0 &&
+      (dashboardTab.pinned || !otherPinnedExist);
     const { needsReordering } = computeUngrouped(allTabs, dashboardTab);
 
     if (!dashboardNeedsMove && !needsReordering) {
@@ -2385,17 +2380,17 @@ import { getFocusedWindowId, getRenderContext, setFocusedWindow, toggleFocusLock
         tabs = await chrome.tabs.query({ windowId: focusedWindowId }); // indices changed
       }
 
-      // 2. Move all ungrouped tabs to the end (recomputed on current indices).
+      // 2. Move all ungrouped tabs to the end — in ONE batched move (passing the
+      // id array) rather than one call per tab. With many ungrouped tabs the
+      // per-tab loop fired a storm of onMoved events and was slow; a single move
+      // is faster and shrinks the window where a late onMoved could re-trigger.
       const { ungrouped, needsReordering: stillNeeds } = computeUngrouped(tabs, dashboardTab);
-      if (stillNeeds) {
-        for (const tab of ungrouped) {
-          try {
-            await chrome.tabs.move(tab.id, { index: -1 });
-          } catch (moveError) {
-            // Ignore errors when tabs are being dragged by the user
-            if (moveError.message && moveError.message.includes("cannot be edited right now")) {
-              continue;
-            }
+      if (stillNeeds && ungrouped.length) {
+        try {
+          await chrome.tabs.move(ungrouped.map(t => t.id), { index: -1 });
+        } catch (moveError) {
+          // Ignore errors when tabs are being dragged by the user
+          if (!moveError.message || !moveError.message.includes("cannot be edited right now")) {
             throw moveError;
           }
         }
